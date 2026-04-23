@@ -1,0 +1,13 @@
+{
+  "name": "coverage-server-demo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs"
+  },
+  "dependencies": {
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-source-maps": "^5.0.6"
+  }
+}

@@ -1,0 +1,11 @@
+---
+description: 接口变更时同步更新 docs/API.md
+alwaysApply: true
+---
+
+# API 文档同步
+
+本仓库的 HTTP 接口清单维护在 **`docs/API.md`**。
+
+- 新增、删除或修改 **路由路径、HTTP 方法、请求/响应体、鉴权方式（`@Public` / `@SkipApiPermission` / `@RequireApiPermissions`）** 时，必须在同一任务中 **更新 `docs/API.md`**：相应章节表格、第七节汇总表，以及第九节权限 code 表（若涉及）。
+- 不要只改控制器而不改文档；文档与代码应保持一致。

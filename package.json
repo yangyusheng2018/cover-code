@@ -1,0 +1,22 @@
+{
+  "name": "cover-code",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build:sdk": "pnpm -r --filter \"@istanbul-live/*\" run build",
+    "postinstall": "pnpm run build",
+    "dev:vite": "pnpm --filter vite-vue3-demo dev",
+    "build:vite": "pnpm --filter vite-vue3-demo build",
+    "dev:webpack": "pnpm --filter webpack-vue3-demo dev",
+    "build:webpack": "pnpm --filter webpack-vue3-demo build",
+    "dev:react": "pnpm --filter webpack-react-ts-demo dev",
+    "build:webpack-react": "pnpm --filter webpack-react-ts-demo build",
+    "dev:admin": "pnpm --filter cover-admin-bi dev",
+    "build:admin": "pnpm --filter cover-admin-bi build",
+    "preview:admin": "pnpm --filter cover-admin-bi preview",
+    "dev:server": "pnpm --filter cover-admin-server run start:dev",
+    "build:server": "pnpm --filter cover-admin-server run build",
+    "start:server": "pnpm --filter cover-admin-server run start",
+    "start:server:prod": "pnpm --filter cover-admin-server run start:prod"
+  }
+}

@@ -1,0 +1,275 @@
+-- 与 TypeORM 实体及 database/schema.sql 对齐的建库脚本（仅 RBAC + 用户 + 登录）
+-- 默认库名 cover_admin，与 ConfigService DB_DATABASE 一致
+
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+CREATE DATABASE IF NOT EXISTS `cover_admin`
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
+
+USE `cover_admin`;
+
+DROP TABLE IF EXISTS `coverage_file`;
+DROP TABLE IF EXISTS `coverage_report`;
+DROP TABLE IF EXISTS `branch_coverage`;
+DROP TABLE IF EXISTS `project`;
+DROP TABLE IF EXISTS `role_ui_permission`;
+DROP TABLE IF EXISTS `role_api_permission`;
+DROP TABLE IF EXISTS `user_role`;
+DROP TABLE IF EXISTS `refresh_token`;
+DROP TABLE IF EXISTS `ui_permission`;
+DROP TABLE IF EXISTS `api_permission`;
+DROP TABLE IF EXISTS `role`;
+DROP TABLE IF EXISTS `user`;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+CREATE TABLE `user` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `username` varchar(64) NOT NULL,
+  `password_hash` varchar(255) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_username` (`username`),
+  KEY `idx_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `refresh_token` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint unsigned NOT NULL,
+  `token` varchar(512) NOT NULL,
+  `expires_at` datetime(3) NOT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_token` (`token`(255)),
+  KEY `idx_user_id` (`user_id`),
+  CONSTRAINT `fk_refresh_token_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `role` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(64) NOT NULL,
+  `code` varchar(64) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_role_code` (`code`),
+  UNIQUE KEY `uk_role_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `user_role` (
+  `user_id` bigint unsigned NOT NULL,
+  `role_id` bigint unsigned NOT NULL,
+  PRIMARY KEY (`user_id`, `role_id`),
+  KEY `idx_user_role_role` (`role_id`),
+  CONSTRAINT `fk_user_role_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_user_role_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `api_permission` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(128) NOT NULL,
+  `name` varchar(128) NOT NULL,
+  `http_method` varchar(16) DEFAULT NULL,
+  `route_path` varchar(255) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_api_permission_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `role_api_permission` (
+  `role_id` bigint unsigned NOT NULL,
+  `api_permission_id` bigint unsigned NOT NULL,
+  PRIMARY KEY (`role_id`, `api_permission_id`),
+  KEY `idx_rap_api` (`api_permission_id`),
+  CONSTRAINT `fk_rap_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_rap_api` FOREIGN KEY (`api_permission_id`) REFERENCES `api_permission` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `ui_permission` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `parent_id` bigint unsigned DEFAULT NULL,
+  `type` varchar(32) NOT NULL,
+  `name` varchar(128) NOT NULL,
+  `code` varchar(128) DEFAULT NULL,
+  `path` varchar(255) DEFAULT NULL,
+  `sort_order` int NOT NULL DEFAULT 0,
+  `show_in_menu` tinyint(1) NOT NULL DEFAULT 1,
+  `remark` varchar(255) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ui_permission_code` (`code`),
+  KEY `idx_ui_parent` (`parent_id`),
+  CONSTRAINT `fk_ui_parent` FOREIGN KEY (`parent_id`) REFERENCES `ui_permission` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `role_ui_permission` (
+  `role_id` bigint unsigned NOT NULL,
+  `ui_permission_id` bigint unsigned NOT NULL,
+  PRIMARY KEY (`role_id`, `ui_permission_id`),
+  KEY `idx_rup_ui` (`ui_permission_id`),
+  CONSTRAINT `fk_rup_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_rup_ui` FOREIGN KEY (`ui_permission_id`) REFERENCES `ui_permission` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `project` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL COMMENT '项目名称',
+  `code` varchar(128) NOT NULL COMMENT '项目唯一 code',
+  `git_url` varchar(512) NOT NULL COMMENT 'Git 地址',
+  `main_branch` varchar(128) NOT NULL DEFAULT 'master' COMMENT '主分支',
+  `relative_dir` varchar(512) DEFAULT NULL COMMENT '项目相对目录',
+  `repo_token` varchar(2048) DEFAULT NULL COMMENT '仓库访问令牌（私有拉取），仅服务端使用',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_project_code` (`code`),
+  KEY `idx_project_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='项目管理';
+
+CREATE TABLE `branch_coverage` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `project_id` bigint unsigned NOT NULL COMMENT '项目 id',
+  `test_branch` varchar(255) NOT NULL COMMENT '测试分支',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_bc_project_branch` (`project_id`, `test_branch`),
+  KEY `idx_bc_project` (`project_id`),
+  CONSTRAINT `fk_bc_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分支覆盖率配置';
+
+CREATE TABLE `coverage_report` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `branch_coverage_id` bigint unsigned NOT NULL COMMENT '关联 branch_coverage（项目+测试分支）',
+  `git_commit` varchar(64) DEFAULT NULL COMMENT '当前提交 X-Git-Commit',
+  `coverage_mode` varchar(16) NOT NULL DEFAULT 'full' COMMENT 'full=全量 incremental=增量 inScope',
+  `parent_commit` varchar(64) DEFAULT NULL COMMENT '合并来源父提交（meta）',
+  `diff_base_commit` varchar(64) DEFAULT NULL COMMENT '增量 diff 基准（如 main）',
+  `file_count` int unsigned NOT NULL DEFAULT '0' COMMENT '本批次文件数',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cr_bc_commit` (`branch_coverage_id`, `git_commit`),
+  KEY `idx_cr_bc_created` (`branch_coverage_id`, `created_at`),
+  CONSTRAINT `fk_cr_branch_coverage` FOREIGN KEY (`branch_coverage_id`) REFERENCES `branch_coverage` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='一次覆盖率上报';
+
+CREATE TABLE `coverage_file` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `report_id` bigint unsigned NOT NULL,
+  `path` varchar(4096) NOT NULL COMMENT '文件路径（与 Istanbul 键一致）',
+  `line_details` json NOT NULL COMMENT '行级：inScope/instrument/covered/carried',
+  `covered_lines` json NOT NULL COMMENT '由 line_details 派生（兼容/查询）',
+  `uncovered_lines` json NOT NULL COMMENT '由 line_details 派生（兼容/查询）',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_cf_report_path` (`report_id`, `path`(512)),
+  KEY `idx_cf_report` (`report_id`),
+  CONSTRAINT `fk_cf_report` FOREIGN KEY (`report_id`) REFERENCES `coverage_report` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='单文件行覆盖明细';
+
+-- 默认用户角色（super_admin）：绑定全部接口/UI；初始用户 admin 归入此角色（与其它角色相同按绑定校验，无短路）
+INSERT INTO `role` (`id`, `name`, `code`, `description`) VALUES
+(1, '用户角色', 'super_admin', '初始角色：已绑定全部接口与 UI 权限；无代码层权限短路');
+
+INSERT INTO `api_permission` (`code`, `name`, `http_method`, `route_path`, `description`) VALUES
+('user:list', '用户分页列表', 'POST', '/api/users/list', NULL),
+('user:delete', '删除用户', 'POST', '/api/users/delete', NULL),
+('role:list', '角色列表', 'POST', '/api/roles/list', NULL),
+('role:detail', '角色详情', 'POST', '/api/roles/detail', NULL),
+('role:create', '创建角色', 'POST', '/api/roles/create', NULL),
+('role:update', '更新角色', 'POST', '/api/roles/update', NULL),
+('role:delete', '删除角色', 'POST', '/api/roles/delete', NULL),
+('role:assign-users', '角色添加用户', 'POST', '/api/roles/assign-users', NULL),
+('role:remove-users', '角色移除用户', 'POST', '/api/roles/remove-users', NULL),
+('role:set-api-permissions', '角色配置接口权限', 'POST', '/api/roles/set-api-permissions', NULL),
+('role:set-ui-permissions', '角色配置菜单按钮', 'POST', '/api/roles/set-ui-permissions', NULL),
+('role:list-users', '角色下用户列表', 'POST', '/api/roles/list-users', NULL),
+('api-perm:list', '接口权限列表', 'POST', '/api/api-permissions/list', NULL),
+('api-perm:create', '创建接口权限', 'POST', '/api/api-permissions/create', NULL),
+('api-perm:update', '更新接口权限', 'POST', '/api/api-permissions/update', NULL),
+('api-perm:delete', '删除接口权限', 'POST', '/api/api-permissions/delete', NULL),
+('ui-perm:list', 'UI 权限平铺列表', 'POST', '/api/ui-permissions/list', NULL),
+('ui-perm:tree', 'UI 权限树', 'GET', '/api/ui-permissions/tree', NULL),
+('ui-perm:create', '创建 UI 节点', 'POST', '/api/ui-permissions/create', NULL),
+('ui-perm:update', '更新 UI 节点', 'POST', '/api/ui-permissions/update', NULL),
+('ui-perm:delete', '删除 UI 节点', 'POST', '/api/ui-permissions/delete', NULL),
+('ui-perm:move', '移动 UI 节点', 'POST', '/api/ui-permissions/move', NULL),
+('project:list', '项目分页列表；GET/POST /api/projects/options 简要列表', 'POST', '/api/projects/list', NULL),
+('project:detail', '项目详情', 'POST', '/api/projects/detail', NULL),
+('project:create', '创建项目', 'POST', '/api/projects/create', NULL),
+('project:update', '更新项目', 'POST', '/api/projects/update', NULL),
+('project:delete', '删除项目', 'POST', '/api/projects/delete', NULL),
+('branch-coverage:list', '分支覆盖率分页列表', 'POST', '/api/branch-coverages/list', NULL),
+('branch-coverage:detail', '分支覆盖率详情', 'POST', '/api/branch-coverages/detail', NULL),
+('branch-coverage:create', '创建分支覆盖率', 'POST', '/api/branch-coverages/create', NULL),
+('branch-coverage:update', '更新分支覆盖率', 'POST', '/api/branch-coverages/update', NULL),
+('branch-coverage:delete', '删除分支覆盖率', 'POST', '/api/branch-coverages/delete', NULL);
+
+INSERT INTO `role_api_permission` (`role_id`, `api_permission_id`)
+SELECT 1, `id` FROM `api_permission`;
+
+INSERT INTO `ui_permission` (`id`, `parent_id`, `type`, `name`, `code`, `path`, `sort_order`, `show_in_menu`, `remark`) VALUES
+(1, NULL, 'directory', '用户权限', NULL, NULL, 0, 1, '根目录（无 path）'),
+(17, 1, 'menu', '欢迎页', 'menu.home', '/home', 5, 1, NULL),
+(2, 1, 'menu', '用户管理页面', 'menu.user', '/system/user', 10, 1, NULL),
+(3, 2, 'button', '用户查询', 'btn.user.query', NULL, 1, 0, NULL),
+(18, 2, 'button', '添加用户', 'btn.user.add', NULL, 2, 0, NULL),
+(4, 2, 'button', '用户删除', 'btn.user.delete', NULL, 3, 0, NULL),
+(5, 1, 'menu', '角色管理', 'menu.role', '/system/role', 20, 1, NULL),
+(6, 5, 'button', '角色编辑', 'btn.role.edit', NULL, 1, 0, NULL),
+(7, 1, 'menu', '接口权限管理', 'menu.api_permission', '/system/api-permission', 30, 1, NULL),
+(8, 7, 'button', '接口权限-查询', 'btn.api_perm.query', NULL, 1, 0, NULL),
+(9, 7, 'button', '接口权限-新增', 'btn.api_perm.add', NULL, 2, 0, NULL),
+(10, 7, 'button', '接口权限-编辑', 'btn.api_perm.edit', NULL, 3, 0, NULL),
+(11, 7, 'button', '接口权限-删除', 'btn.api_perm.remove', NULL, 4, 0, NULL),
+(12, 1, 'menu', '菜单与按钮', 'menu.ui_permission', '/system/ui-permission', 40, 1, NULL),
+(13, 12, 'button', '菜单按钮-查询', 'btn.ui_perm.query', NULL, 1, 0, NULL),
+(14, 12, 'button', '菜单按钮-新增', 'btn.ui_perm.add', NULL, 2, 0, NULL),
+(15, 12, 'button', '菜单按钮-编辑', 'btn.ui_perm.edit', NULL, 3, 0, NULL),
+(16, 12, 'button', '菜单按钮-删除', 'btn.ui_perm.remove', NULL, 4, 0, NULL),
+(19, 5, 'button', '角色查询', 'btn.role.query', NULL, 0, 0, NULL),
+(20, 5, 'button', '新建角色', 'btn.role.create', NULL, 2, 0, NULL),
+(21, 5, 'button', '权限与用户', 'btn.role.manage', NULL, 3, 0, NULL),
+(22, 5, 'button', '删除角色', 'btn.role.delete', NULL, 5, 0, NULL),
+(23, 5, 'button', '添加成员', 'btn.role.assign_users', NULL, 6, 0, NULL),
+(24, 5, 'button', '移除成员', 'btn.role.remove_user', NULL, 7, 0, NULL),
+(25, 5, 'button', '保存接口权限', 'btn.role.save_api', NULL, 8, 0, NULL),
+(26, 5, 'button', '保存菜单与按钮', 'btn.role.save_ui', NULL, 9, 0, NULL),
+(27, 12, 'button', '菜单按钮-移动', 'btn.ui_perm.move', NULL, 5, 0, NULL),
+(28, 1, 'menu', '项目管理', 'menu.project', '/system/project', 12, 1, NULL),
+(29, 28, 'button', '项目-查询', 'btn.project.query', NULL, 1, 0, NULL),
+(30, 28, 'button', '项目-新增', 'btn.project.add', NULL, 2, 0, NULL),
+(31, 28, 'button', '项目-编辑', 'btn.project.edit', NULL, 3, 0, NULL),
+(32, 28, 'button', '项目-删除', 'btn.project.delete', NULL, 4, 0, NULL),
+(33, 1, 'menu', '分支覆盖率', 'menu.branch_coverage', '/system/branch-coverage', 13, 1, NULL),
+(34, 33, 'button', '覆盖率-查询', 'btn.branch_coverage.query', NULL, 1, 0, NULL),
+(35, 33, 'button', '覆盖率-新增', 'btn.branch_coverage.add', NULL, 2, 0, NULL),
+(36, 33, 'button', '覆盖率-编辑', 'btn.branch_coverage.edit', NULL, 3, 0, NULL),
+(37, 33, 'button', '覆盖率-删除', 'btn.branch_coverage.delete', NULL, 4, 0, NULL),
+(38, 33, 'button', '覆盖率-重置', 'btn.branch_coverage.reset', NULL, 5, 0, NULL);
+
+INSERT INTO `role_ui_permission` (`role_id`, `ui_permission_id`)
+SELECT 1, `id` FROM `ui_permission`;
+
+-- admin 默认绑定用户角色（role_id=1）
+INSERT INTO `user` (`id`, `username`, `password_hash`, `email`) VALUES
+(
+  1,
+  'admin',
+  '$2a$10$BvGx0Kvoj3bNRg2BqlNO3ukIVDO/fgWZkPVbDGp8.N1MkDYy/PNDa',
+  'admin@localhost'
+);
+
+INSERT INTO `user_role` (`user_id`, `role_id`) VALUES (1, 1);
+
+ALTER TABLE `role` AUTO_INCREMENT = 2;
+ALTER TABLE `ui_permission` AUTO_INCREMENT = 38;
+ALTER TABLE `user` AUTO_INCREMENT = 2;

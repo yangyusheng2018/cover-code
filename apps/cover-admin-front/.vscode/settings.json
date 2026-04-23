@@ -1,0 +1,6 @@
+{
+  // Vue 3 + <script setup generic="T"> 需 Vue - Official (Volar)；Vetur 会误报 Cannot find name 'T'
+  "vetur.validation.template": false,
+  "vetur.validation.script": false,
+  "vetur.validation.style": false
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@istanbul-live/instrument",
+  "version": "0.1.0",
+  "description": "Reusable Babel + babel-plugin-istanbul helpers for custom build pipelines",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@babel/core": "^7.26.10",
+    "babel-plugin-istanbul": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "^22.14.1",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}
