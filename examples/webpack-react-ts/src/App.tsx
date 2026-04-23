@@ -6,6 +6,22 @@ export function App(): JSX.Element {
 
   const bump = () => {
     console.log('测试率')
+    if(score > 5){
+      console.log('score > 5');
+      console.log('score > 5');
+      console.log('score > 5');
+      console.log('score > 5');
+      console.log('score > 5');
+      console.log('score > 5');
+    }else{
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+    }
     setScore((s) => s + 1);
   };
   const nouse=()=>{
