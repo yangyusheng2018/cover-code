@@ -16,6 +16,7 @@ const KEEP_ALIVE_NAMES = [
   "UiPermissionManageView",
   "ProjectManageView",
   "BranchCoverageManageView",
+  "IncrementalCoverageManageView",
 ];
 
 export const useTabsStore = defineStore("tabs", () => {

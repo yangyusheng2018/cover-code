@@ -68,6 +68,9 @@ export function isUiShownInSidebarMenu(n: UiPermissionNode): boolean {
 const UI_GATE_PATH_GROUPS: readonly (readonly string[])[] = [
   ['/users', '/system/user'],
   ['/permission/roles', '/system/role'],
+  ['/report/project', '/system/project'],
+  ['/report/branch-coverage', '/system/branch-coverage'],
+  ['/report/incremental-coverage', '/system/incremental-coverage'],
 ]
 
 /** 供 UI 路径门禁：返回与当前 path 等价的一组 path（已 normalize） */

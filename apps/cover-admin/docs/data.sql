@@ -138,10 +138,11 @@ CREATE TABLE `branch_coverage` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `project_id` bigint unsigned NOT NULL COMMENT '项目 id',
   `test_branch` varchar(255) NOT NULL COMMENT '测试分支',
+  `task_scope` varchar(16) NOT NULL DEFAULT 'full' COMMENT 'full=全量覆盖率任务 incremental=增量覆盖率任务',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_bc_project_branch` (`project_id`, `test_branch`),
+  UNIQUE KEY `uk_bc_project_branch_scope` (`project_id`, `test_branch`, `task_scope`),
   KEY `idx_bc_project` (`project_id`),
   CONSTRAINT `fk_bc_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分支覆盖率配置';
@@ -254,7 +255,8 @@ INSERT INTO `ui_permission` (`id`, `parent_id`, `type`, `name`, `code`, `path`, 
 (35, 33, 'button', '覆盖率-新增', 'btn.branch_coverage.add', NULL, 2, 0, NULL),
 (36, 33, 'button', '覆盖率-编辑', 'btn.branch_coverage.edit', NULL, 3, 0, NULL),
 (37, 33, 'button', '覆盖率-删除', 'btn.branch_coverage.delete', NULL, 4, 0, NULL),
-(38, 33, 'button', '覆盖率-重置', 'btn.branch_coverage.reset', NULL, 5, 0, NULL);
+(38, 33, 'button', '覆盖率-重置', 'btn.branch_coverage.reset', NULL, 5, 0, NULL),
+(39, 1, 'menu', '增量覆盖率', 'menu.incremental_coverage', '/system/incremental-coverage', 14, 1, NULL);
 
 INSERT INTO `role_ui_permission` (`role_id`, `ui_permission_id`)
 SELECT 1, `id` FROM `ui_permission`;

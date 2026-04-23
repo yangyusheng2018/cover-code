@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineOptions({ name: 'BranchCoverageManageView' })
+defineOptions({ name: 'IncrementalCoverageManageView' })
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -66,7 +66,7 @@ async function load() {
       projectId: query.projectId,
       page: query.page,
       pageSize: query.pageSize,
-      taskScope: 'full',
+      taskScope: 'incremental',
     })
     rows.value = res.list
     total.value = res.total
@@ -102,7 +102,7 @@ async function save() {
       await api.createBranchCoverage({
         projectId: form.projectId!,
         testBranch: form.testBranch.trim(),
-        taskScope: 'full',
+        taskScope: 'incremental',
       })
       ElMessage.success('已创建')
     } else {
@@ -164,7 +164,7 @@ onMounted(async () => {
   <el-card shadow="never">
     <template #header>
       <div class="toolbar">
-        <span>全量覆盖率管理</span>
+        <span>增量覆盖率</span>
         <div class="toolbar__actions">
           <el-select
             v-model="query.projectId"
@@ -201,6 +201,12 @@ onMounted(async () => {
         </div>
       </div>
     </template>
+
+    <p class="hint">
+      此处仅管理<strong>增量覆盖率任务</strong>（与全量页数据隔离）；上报时请求头需带
+      <code>X-Coverage-Task-Scope: incremental</code> 与配置一致。查看详情时按主分支与测试分支在 GitHub
+      上的 diff 过滤行与文件（需 GitHub 与 Token 时同全量说明）。
+    </p>
 
     <el-table v-loading="loading" :data="rows" border stripe style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
@@ -289,7 +295,11 @@ onMounted(async () => {
     </template>
   </el-dialog>
 
-  <BranchCoverageDetailDialog v-model="detailVisible" :branch-coverage-id="detailBranchCoverageId" />
+  <BranchCoverageDetailDialog
+    v-model="detailVisible"
+    :branch-coverage-id="detailBranchCoverageId"
+    incremental-view
+  />
 </template>
 
 <style scoped lang="scss">
@@ -305,6 +315,13 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
 }
 
 .pager {

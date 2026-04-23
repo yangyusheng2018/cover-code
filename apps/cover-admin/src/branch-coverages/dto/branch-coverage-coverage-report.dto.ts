@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, Min } from 'class-validator';
 
 /** 分支覆盖率「查看覆盖率详情」：汇总 + 文件树 + 行级数据 */
 export class BranchCoverageCoverageReportDto {
@@ -22,4 +22,12 @@ export class BranchCoverageCoverageReportDto {
   @IsOptional()
   @IsBoolean()
   includeLineDetails?: boolean;
+
+  /**
+   * `incremental`：相对项目主分支与目标测试分支的 GitHub compare，仅在 diff 涉及行上汇总/展示；
+   * 文件列表仅含对比中有 patch 且与覆盖率路径能对齐的文件。
+   */
+  @IsOptional()
+  @IsIn(['full', 'incremental'])
+  view?: 'full' | 'incremental';
 }

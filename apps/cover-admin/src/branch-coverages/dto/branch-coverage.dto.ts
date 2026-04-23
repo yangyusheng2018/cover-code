@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateBranchCoverageDto {
   @Type(() => Number)
@@ -11,6 +11,11 @@ export class CreateBranchCoverageDto {
   @IsNotEmpty()
   @MaxLength(255)
   testBranch: string;
+
+  /** 默认 full；增量管理页传 incremental */
+  @IsOptional()
+  @IsIn(['full', 'incremental'])
+  taskScope?: 'full' | 'incremental';
 }
 
 export class UpdateBranchCoverageDto {
@@ -60,6 +65,11 @@ export class ListBranchCoverageDto {
   @IsInt()
   @Min(1)
   projectId?: number;
+
+  /** 不传时默认 full，与旧客户端兼容 */
+  @IsOptional()
+  @IsIn(['full', 'incremental'])
+  taskScope?: 'full' | 'incremental';
 
   @IsOptional()
   @IsString()

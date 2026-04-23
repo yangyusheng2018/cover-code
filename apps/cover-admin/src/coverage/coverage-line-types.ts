@@ -12,6 +12,11 @@ export interface CoverageLineDetail {
   covered: boolean | null;
   /** 是否从父提交继承的已覆盖状态（未在 resetLines 中的行可能为 true） */
   carried?: boolean;
+  /**
+   * 仅 API 增量视图：相对主分支 unified diff 中该行在新文件侧为「+」新增或「 」上下文。
+   * 不入库。
+   */
+  diffMark?: '+' | ' ';
 }
 
 export type CoverageMode = 'full' | 'incremental';

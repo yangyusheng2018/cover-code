@@ -29,6 +29,8 @@ export interface CoverageLineDetailDto {
   instrument: 'none' | 'ok' | 'fail' | 'unknown'
   covered: boolean | null
   carried?: boolean
+  /** 增量视图：unified diff 新侧 `+` 或上下文空格行 */
+  diffMark?: '+' | ' '
 }
 
 export interface SourceHintDto {
@@ -72,6 +74,14 @@ export interface CoverageReportBranchVm {
   relativeDir: string
 }
 
+/** 后端 `view=incremental` 时附带：主分支 vs 测试分支 Git 对比元信息 */
+export interface CoverageDiffContextVm {
+  baseBranch: string
+  headBranch: string
+  provider?: string
+  error?: string | null
+}
+
 /** 弹窗使用的统一视图模型 */
 export interface CoverageReportDetailVm {
   empty: boolean
@@ -83,6 +93,7 @@ export interface CoverageReportDetailVm {
   files: CoverageReportFileVm[]
   report?: Record<string, unknown> | null
   visualizationHint?: unknown
+  diffContext?: CoverageDiffContextVm | null
 }
 
 /** 行着色：与后端 instrument / covered 一致 */
@@ -138,6 +149,11 @@ function normalizeSourceHint(raw: Record<string, unknown> | undefined): SourceHi
 }
 
 function normalizeLineDetail(raw: Record<string, unknown>): CoverageLineDetailDto {
+  const dm = raw.diffMark ?? raw.diff_mark
+  let diffMark: '+' | ' ' | undefined
+  if (dm === '+' || dm === ' ') {
+    diffMark = dm
+  }
   return {
     line: pickNum(raw.line ?? raw.lineNumber ?? raw.line_number, 0),
     inScope: Boolean(raw.inScope ?? raw.in_scope ?? true),
@@ -153,6 +169,7 @@ function normalizeLineDetail(raw: Record<string, unknown>): CoverageLineDetailDt
         ? null
         : Boolean(raw.covered),
     carried: raw.carried != null ? Boolean(raw.carried) : undefined,
+    diffMark,
   }
 }
 
@@ -223,6 +240,21 @@ export function parseCoverageReportResponse(body: unknown): CoverageReportDetail
     ? filesRaw.map((f) => normalizeReportFile((f ?? {}) as Record<string, unknown>))
     : []
 
+  const dcRaw = raw.diffContext ?? raw.diff_context
+  let diffContext: CoverageDiffContextVm | null = null
+  if (dcRaw && typeof dcRaw === 'object' && !Array.isArray(dcRaw)) {
+    const o = dcRaw as Record<string, unknown>
+    const er = o.error
+    const errorNorm =
+      er === undefined ? undefined : er === null ? null : pickStr(er) || null
+    diffContext = {
+      baseBranch: pickStr(o.baseBranch ?? o.base_branch),
+      headBranch: pickStr(o.headBranch ?? o.head_branch),
+      provider: pickStr(o.provider) || undefined,
+      error: errorNorm,
+    }
+  }
+
   return {
     empty,
     message,
@@ -232,5 +264,6 @@ export function parseCoverageReportResponse(body: unknown): CoverageReportDetail
     files,
     report: (raw.report ?? null) as Record<string, unknown> | null,
     visualizationHint: raw.visualizationHint ?? raw.visualization_hint,
+    diffContext,
   }
 }

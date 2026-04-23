@@ -22,6 +22,8 @@ export interface CoverageIngestParams {
   parentCommitHeader?: string;
   coverageModeHeader?: string;
   diffBaseCommitHeader?: string;
+  /** `full`（默认）或 `incremental`，与 branch_coverage.task_scope 对齐 */
+  taskScopeHeader?: string;
 }
 
 @Injectable()
@@ -49,6 +51,7 @@ export class CoverageService {
       parentCommitHeader,
       coverageModeHeader,
       diffBaseCommitHeader,
+      taskScopeHeader,
     } = params;
 
     if (!projectCode || !gitBranch) {
@@ -63,11 +66,25 @@ export class CoverageService {
     if (!project) {
       return { success: false as const, message: "无此项目或者分支" };
     }
+    const taskScope: "full" | "incremental" =
+      taskScopeHeader?.trim().toLowerCase() === "incremental"
+        ? "incremental"
+        : "full";
     const bc = await this.bcRepo.findOne({
-      where: { projectId: project.id, testBranch: gitBranch.trim() },
+      where: {
+        projectId: project.id,
+        testBranch: gitBranch.trim(),
+        taskScope,
+      },
     });
     if (!bc) {
-      return { success: false as const, message: "无此项目或者分支" };
+      return {
+        success: false as const,
+        message:
+          taskScope === "incremental"
+            ? "无此项目、分支或增量覆盖率任务（请确认已在「增量覆盖率」页创建任务，且上报头 X-Coverage-Task-Scope: incremental）"
+            : "无此项目或者分支（全量任务请确认 X-Coverage-Task-Scope 为 full 或省略）",
+      };
     }
 
     if (!body || typeof body !== "object" || Object.keys(body).length === 0) {

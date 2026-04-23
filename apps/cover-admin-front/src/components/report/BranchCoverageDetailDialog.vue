@@ -13,6 +13,8 @@ import { buildCoverageFileTree, type CoverageTreeItem } from '@/utils/buildCover
 const props = defineProps<{
   modelValue: boolean
   branchCoverageId: number | null
+  /** 为 true 时请求 `view=incremental`：按主分支 vs 测试分支 GitHub diff 过滤行与文件 */
+  incrementalView?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -162,9 +164,20 @@ const displayLines = computed(() => {
   const path = selectedFilePath.value
   const f = currentFile.value
   if (!f || !path) {
-    return [] as { lineNumber: number; text: string; state: UiLineState }[]
+    return [] as { lineNumber: number; text: string; state: UiLineState; diffMark?: '+' | ' ' }[]
   }
   const src = sourceLinesCache.value[path] ?? []
+  if (props.incrementalView && f.lineDetails?.length) {
+    return [...f.lineDetails]
+      .slice()
+      .sort((a, b) => a.line - b.line)
+      .map((d) => ({
+        lineNumber: d.line,
+        text: src[d.line - 1] ?? '',
+        state: mapBackendLineToUiState(d),
+        diffMark: d.diffMark,
+      }))
+  }
   const map = new Map(f.lineDetails.map((d) => [d.line, d]))
   let maxLine = src.length
   for (const d of f.lineDetails) {
@@ -175,7 +188,7 @@ const displayLines = computed(() => {
   if (maxLine === 0 && f.lineDetails.length) {
     maxLine = Math.max(...f.lineDetails.map((d) => d.line))
   }
-  const out: { lineNumber: number; text: string; state: UiLineState }[] = []
+  const out: { lineNumber: number; text: string; state: UiLineState; diffMark?: '+' | ' ' }[] = []
   for (let i = 1; i <= maxLine; i++) {
     const d = map.get(i)
     const text = src[i - 1] ?? (d ? '\u2003' : '')
@@ -193,7 +206,9 @@ async function loadDetail() {
   }
   loading.value = true
   try {
-    detail.value = await api.fetchBranchCoverageDetail(id)
+    detail.value = await api.fetchBranchCoverageDetail(id, {
+      view: props.incrementalView ? 'incremental' : undefined,
+    })
     const first = detail.value.files[0]?.path ?? null
     selectedFilePath.value = first
     await nextTickSelectTree()
@@ -224,7 +239,7 @@ function onTreeNodeClick(data: CoverageTreeItem) {
 }
 
 watch(
-  () => [props.modelValue, props.branchCoverageId] as const,
+  () => [props.modelValue, props.branchCoverageId, props.incrementalView] as const,
   ([open, id]) => {
     if (open && id != null) {
       void loadDetail()
@@ -241,10 +256,11 @@ watch(
 
 const dialogTitle = computed(() => {
   const bc = detail.value?.branchCoverage
+  const prefix = props.incrementalView ? '增量覆盖率详情' : '覆盖率详情'
   if (!bc) {
-    return '覆盖率详情'
+    return prefix
   }
-  return `覆盖率详情 · ${bc.projectName || '—'} / ${bc.testBranch || '—'}`
+  return `${prefix} · ${bc.projectName || '—'} / ${bc.testBranch || '—'}`
 })
 
 function lineClass(state: UiLineState) {
@@ -279,9 +295,31 @@ function lineClass(state: UiLineState) {
       </template>
 
       <template v-else-if="detail && summaryTotals">
+        <el-alert
+          v-if="incrementalView && detail.diffContext?.error"
+          type="error"
+          show-icon
+          :closable="false"
+          class="mb"
+          :title="`无法完成分支对比：${detail.diffContext.error}`"
+        />
+        <p v-else-if="incrementalView && detail.diffContext" class="diff-range-hint">
+          对比范围：<strong>{{ detail.diffContext.baseBranch }}</strong>（主分支）→
+          <strong>{{ detail.diffContext.headBranch }}</strong>（测试分支）· GitHub
+        </p>
+        <el-alert
+          v-if="incrementalView && !detail.diffContext?.error && !detail.files.length && !detail.empty"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="mb"
+          title="对比范围内没有与覆盖率路径对齐的文件（请检查 relativeDir 与 GitHub 路径是否一致，或该次对比是否无 patch）。"
+        />
         <div class="detail-summary">
           <div class="detail-summary__item">
-            <span class="detail-summary__label">行覆盖率</span>
+            <span class="detail-summary__label">{{
+              incrementalView ? '行覆盖率（diff 内）' : '行覆盖率'
+            }}</span>
             <strong class="detail-summary__value">{{
               summaryTotals.pct != null ? `${summaryTotals.pct.toFixed(2)}%` : '—'
             }}</strong>
@@ -317,6 +355,10 @@ function lineClass(state: UiLineState) {
           <span class="legend-i legend-i--covered">已覆盖</span>
           <span class="legend-i legend-i--missed">未覆盖</span>
           <span class="legend-i legend-i--fail">插桩失败</span>
+          <template v-if="incrementalView">
+            <span class="legend-i legend-i--diffadd">diff + 新增行</span>
+            <span class="legend-i legend-i--diffctx">diff 上下文行</span>
+          </template>
         </div>
 
         <el-table
@@ -370,7 +412,7 @@ function lineClass(state: UiLineState) {
           </div>
           <div class="detail-source">
             <div class="detail-source__caption">
-              源码（与行级数据对齐）
+              {{ incrementalView ? '源码与 diff（仅对比涉及行）' : '源码（与行级数据对齐）' }}
               <span v-if="currentFile" class="detail-source__path">{{ currentFile.path }}</span>
             </div>
             <p v-if="currentSourceMeta?.commit" class="detail-source__hint">
@@ -395,6 +437,9 @@ function lineClass(state: UiLineState) {
                     :key="`${currentFile.path}:${ln.lineNumber}`"
                     :class="lineClass(ln.state)"
                   >
+                    <span v-if="incrementalView" class="source-code__diff" aria-hidden="true">{{
+                      ln.diffMark === '+' ? '+' : ' '
+                    }}</span>
                     <span class="source-code__no">{{ ln.lineNumber }}</span>
                     <span class="source-code__text">{{ ln.text }}</span>
                   </div>
@@ -503,6 +548,22 @@ function lineClass(state: UiLineState) {
   color: #b88230;
 }
 
+.legend-i--diffadd {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.legend-i--diffctx {
+  background: #eceff1;
+  color: #546e7a;
+}
+
+.diff-range-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #606266;
+}
+
 .detail-file-table {
   margin-bottom: 12px;
 }
@@ -565,6 +626,14 @@ function lineClass(state: UiLineState) {
   gap: 8px;
   padding: 0 4px;
   border-left: 3px solid transparent;
+}
+
+.source-code__diff {
+  flex: 0 0 1.25em;
+  text-align: center;
+  color: #607d8b;
+  font-weight: 600;
+  user-select: none;
 }
 
 .source-code__no {

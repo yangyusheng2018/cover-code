@@ -121,7 +121,18 @@ export const router = createRouter({
           component: () =>
             import("@/views/report/BranchCoverageManageView.vue"),
           meta: {
-            title: "分支覆盖率",
+            title: "全量覆盖率管理",
+            showInMenu: true,
+            useUiPathGate: true,
+          },
+        },
+        {
+          path: "report/incremental-coverage",
+          name: "report-incremental-coverage",
+          component: () =>
+            import("@/views/report/IncrementalCoverageManageView.vue"),
+          meta: {
+            title: "增量覆盖率",
             showInMenu: true,
             useUiPathGate: true,
           },

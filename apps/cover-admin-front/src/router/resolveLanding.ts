@@ -16,6 +16,7 @@ const LANDING_CANDIDATES: { path: string; useUiGate: boolean }[] = [
   { path: "/system/ui-permission", useUiGate: true },
   { path: "/report/project", useUiGate: true },
   { path: "/report/branch-coverage", useUiGate: true },
+  { path: "/report/incremental-coverage", useUiGate: true },
 ];
 
 function canAccessLanding(

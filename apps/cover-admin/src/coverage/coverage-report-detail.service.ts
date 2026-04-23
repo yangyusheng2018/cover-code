@@ -16,6 +16,7 @@ import {
   summarizeLineDetails,
 } from './coverage-line-stats';
 import type { CoverageLineDetail } from './coverage-line-types';
+import { CoverageBranchDiffService } from './coverage-branch-diff.service';
 
 @Injectable()
 export class CoverageReportDetailService {
@@ -24,6 +25,7 @@ export class CoverageReportDetailService {
     private readonly reportRepo: Repository<CoverageReport>,
     @InjectRepository(CoverageFile)
     private readonly fileRepo: Repository<CoverageFile>,
+    private readonly branchDiff: CoverageBranchDiffService,
   ) {}
 
   /**
@@ -33,6 +35,7 @@ export class CoverageReportDetailService {
     bc: BranchCoverage & { project: Project },
     reportId: number | undefined,
     includeLineDetails: boolean,
+    view?: 'full' | 'incremental',
   ) {
     const report = await this.findReport(bc.id, reportId);
     if (reportId && !report) {
@@ -56,12 +59,110 @@ export class CoverageReportDetailService {
       order: { path: 'ASC' },
     });
 
-    const paths = files.map((f) => f.path);
-    const fileTree = buildCoverageFileTree(paths);
+    const includeDetailsForMap =
+      view === 'incremental' ? true : includeLineDetails !== false;
+    const mapped = this.mapFiles(bc.project, report, files, includeDetailsForMap);
 
-    const mapped = this.mapFiles(bc.project, report, files, includeLineDetails);
-    const perStats = mapped.map((f) => f.stats);
-    const total = mergeFileStats(perStats);
+    if (view !== 'incremental') {
+      const paths = files.map((f) => f.path);
+      const fileTree = buildCoverageFileTree(paths);
+      const perStats = mapped.map((f) => f.stats);
+      const total = mergeFileStats(perStats);
+      const filesOut = this.stripLineDetailsIfNeeded(mapped, includeLineDetails);
+      return {
+        empty: false as const,
+        branchCoverage: this.branchCoverageBlock(bc),
+        report: {
+          id: report.id,
+          gitCommit: report.gitCommit,
+          coverageMode: report.coverageMode ?? 'full',
+          parentCommit: report.parentCommit,
+          diffBaseCommit: report.diffBaseCommit,
+          fileCount: report.fileCount,
+          createdAt: report.createdAt,
+          updatedAt: report.updatedAt,
+        },
+        summary: {
+          coverageRatePercent: lineCoverageRatePercent(total),
+          totalFiles: files.length,
+          linesInstrumentOk: total.instrumentOk,
+          linesCovered: total.covered,
+          linesUncovered: total.uncovered,
+          linesNone: total.none,
+          linesFail: total.fail,
+        },
+        fileTree,
+        files: filesOut,
+        visualizationHint: this.visualizationHint(),
+      };
+    }
+
+    const mainBranch = bc.project.mainBranch?.trim() || 'main';
+    const testBranch = bc.testBranch?.trim() || '';
+    const { pathToMarks, error } = await this.branchDiff.fetchGithubCompareLineMarks(
+      bc.project,
+      mainBranch,
+      testBranch,
+    );
+
+    const diffContext = {
+      baseBranch: mainBranch,
+      headBranch: testBranch,
+      provider: 'github' as const,
+      error: error ?? null,
+    };
+
+    const mappedInc: Array<{
+      path: string;
+      stats: ReturnType<typeof summarizeLineDetails>;
+      lineDetails?: CoverageLineDetail[];
+      sourceHint: ReturnType<typeof buildSourceHint>;
+    }> = [];
+
+    for (const row of mapped) {
+      const rp = this.branchDiff.repoPathForCoverageFile(bc.project, row.path);
+      const marks = pathToMarks.get(rp);
+      if (!marks?.size) {
+        continue;
+      }
+      const details = row.lineDetails ?? [];
+      let filtered: CoverageLineDetail[] = details
+        .filter((d) => marks.has(d.line))
+        .map((d) => ({
+          ...d,
+          diffMark: marks.get(d.line) ?? ' ',
+        }));
+
+      if (!filtered.length) {
+        filtered = [...marks.keys()]
+          .sort((a, b) => a - b)
+          .map((line) => ({
+            line,
+            inScope: true,
+            instrument: 'none' as const,
+            covered: null,
+            diffMark: marks.get(line) ?? ' ',
+          }));
+      }
+
+      const stats = summarizeLineDetails(
+        filtered.map(({ diffMark: _dm, ...rest }) => rest),
+      );
+      const outRow: (typeof mappedInc)[0] = {
+        path: row.path,
+        stats,
+        sourceHint: row.sourceHint,
+      };
+      if (includeLineDetails !== false) {
+        outRow.lineDetails = filtered;
+      }
+      mappedInc.push(outRow);
+    }
+
+    const pathsInc = mappedInc.map((f) => f.path);
+    const fileTreeInc = buildCoverageFileTree(pathsInc);
+    const perStatsInc = mappedInc.map((f) => f.stats);
+    const totalInc = mergeFileStats(perStatsInc);
 
     return {
       empty: false as const,
@@ -77,18 +178,31 @@ export class CoverageReportDetailService {
         updatedAt: report.updatedAt,
       },
       summary: {
-        coverageRatePercent: lineCoverageRatePercent(total),
-        totalFiles: files.length,
-        linesInstrumentOk: total.instrumentOk,
-        linesCovered: total.covered,
-        linesUncovered: total.uncovered,
-        linesNone: total.none,
-        linesFail: total.fail,
+        coverageRatePercent: lineCoverageRatePercent(totalInc),
+        totalFiles: mappedInc.length,
+        linesInstrumentOk: totalInc.instrumentOk,
+        linesCovered: totalInc.covered,
+        linesUncovered: totalInc.uncovered,
+        linesNone: totalInc.none,
+        linesFail: totalInc.fail,
       },
-      fileTree,
-      files: mapped,
+      fileTree: fileTreeInc,
+      files: mappedInc,
+      diffContext,
       visualizationHint: this.visualizationHint(),
     };
+  }
+
+  private stripLineDetailsIfNeeded<
+    T extends { lineDetails?: CoverageLineDetail[] },
+  >(rows: T[], includeLineDetails: boolean): T[] {
+    if (includeLineDetails !== false) {
+      return rows;
+    }
+    return rows.map((r) => {
+      const { lineDetails: _ld, ...rest } = r;
+      return rest as T;
+    });
   }
 
   private visualizationHint() {

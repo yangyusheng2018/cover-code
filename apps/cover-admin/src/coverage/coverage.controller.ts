@@ -32,6 +32,7 @@ export class CoverageController {
     const parentCommitHeader = readHeader(req, 'x-parent-commit');
     const coverageModeHeader = readHeader(req, 'x-coverage-mode');
     const diffBaseCommitHeader = readHeader(req, 'x-diff-base-commit');
+    const taskScopeHeader = readHeader(req, 'x-coverage-task-scope');
     return this.service.ingest({
       body: body as Record<string, unknown>,
       projectCode,
@@ -40,6 +41,7 @@ export class CoverageController {
       parentCommitHeader,
       coverageModeHeader,
       diffBaseCommitHeader,
+      taskScopeHeader,
     });
   }
 }

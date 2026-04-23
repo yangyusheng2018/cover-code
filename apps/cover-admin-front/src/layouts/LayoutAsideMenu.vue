@@ -62,7 +62,9 @@ const staticMenuGroups = computed(() => {
       title: '上报',
       routes: pick(
         (r) =>
-          r.path === 'report/project' || r.path === 'report/branch-coverage',
+          r.path === 'report/project' ||
+          r.path === 'report/branch-coverage' ||
+          r.path === 'report/incremental-coverage',
       ),
     },
   ]

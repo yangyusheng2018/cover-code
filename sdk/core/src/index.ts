@@ -84,6 +84,11 @@ export type CoverageUploadClientOptions = {
    * 当前提交完整 SHA，随请求头发送 `X-Git-Commit`。省略时由插件从 Git 解析。
    */
   gitCommit?: string;
+  /**
+   * 与 cover-admin `branch_coverage.task_scope` 对齐：`full`（默认）或 `incremental`；
+   * 上报时发送 `X-Coverage-Task-Scope`（会覆盖 `headers` 中同名键）。
+   */
+  taskScope?: "full" | "incremental";
 };
 
 /**
@@ -104,12 +109,18 @@ export function buildCoverageUploadInlineScript(
   const reportPathRoot = options.reportPathRoot?.trim() ?? "";
   const branch = options.gitBranch?.trim() ?? "";
   const commit = options.gitCommit?.trim() ?? "";
+  const ts = options.taskScope?.trim();
+  const taskScopeHeader =
+    ts === "incremental" || ts === "full"
+      ? { "X-Coverage-Task-Scope": ts }
+      : {};
   const headersJson = JSON.stringify({
     "Content-Type": "application/json",
     "X-Project-Code": projectCode,
     ...(branch ? { "X-Git-Branch": branch } : {}),
     ...(commit ? { "X-Git-Commit": commit } : {}),
-    ...(options.headers ?? {})
+    ...(options.headers ?? {}),
+    ...taskScopeHeader
   });
   const rootJson = JSON.stringify(reportPathRoot);
 

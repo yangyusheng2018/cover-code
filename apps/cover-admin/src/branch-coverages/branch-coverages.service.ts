@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BranchCoverage } from './entities/branch-coverage.entity';
@@ -21,6 +26,7 @@ export interface BranchCoverageRow {
   id: number;
   projectId: number;
   testBranch: string;
+  taskScope: 'full' | 'incremental';
   projectCode: string;
   projectName: string;
   createdAt: Date;
@@ -49,11 +55,23 @@ export class BranchCoveragesService {
   async create(dto: CreateBranchCoverageDto): Promise<BranchCoverageRow> {
     await this.ensureProject(dto.projectId);
     const tb = dto.testBranch.trim();
+    const taskScope: 'full' | 'incremental' =
+      dto.taskScope === 'incremental' ? 'incremental' : 'full';
     const dup = await this.repo.findOne({
-      where: { projectId: dto.projectId, testBranch: tb },
+      where: { projectId: dto.projectId, testBranch: tb, taskScope },
     });
-    if (dup) throw new ConflictException('该项目下已存在相同测试分支');
-    const row = this.repo.create({ projectId: dto.projectId, testBranch: tb });
+    if (dup) {
+      throw new ConflictException(
+        taskScope === 'incremental'
+          ? '该项目下已存在相同测试分支的增量覆盖率任务'
+          : '该项目下已存在相同测试分支的全量覆盖率任务',
+      );
+    }
+    const row = this.repo.create({
+      projectId: dto.projectId,
+      testBranch: tb,
+      taskScope,
+    });
     const saved = await this.repo.save(row);
     const full = await this.repo.findOne({
       where: { id: saved.id },
@@ -74,9 +92,15 @@ export class BranchCoveragesService {
     if (dto.testBranch != null) {
       const tb = dto.testBranch.trim();
       const dup = await this.repo.findOne({
-        where: { projectId: pid, testBranch: tb },
+        where: { projectId: pid, testBranch: tb, taskScope: row.taskScope },
       });
-      if (dup && dup.id !== row.id) throw new ConflictException('该项目下已存在相同测试分支');
+      if (dup && dup.id !== row.id) {
+        throw new ConflictException(
+          row.taskScope === 'incremental'
+            ? '该项目下已存在相同测试分支的增量覆盖率任务'
+            : '该项目下已存在相同测试分支的全量覆盖率任务',
+        );
+      }
       row.testBranch = tb;
     }
     row.projectId = pid;
@@ -125,11 +149,17 @@ export class BranchCoveragesService {
       relations: ['project'],
     });
     if (!bc?.project) throw new NotFoundException('分支覆盖率记录不存在');
+    if (dto.view === 'incremental' && bc.taskScope !== 'incremental') {
+      throw new BadRequestException(
+        '增量详情（view=incremental）仅适用于「增量覆盖率」任务配置，请在增量管理页创建对应任务',
+      );
+    }
     const includeLineDetails = dto.includeLineDetails !== false;
     return this.coverageReportDetail.getDetailForBranchCoverage(
       bc as BranchCoverage & { project: Project },
       dto.reportId,
       includeLineDetails,
+      dto.view,
     );
   }
 
@@ -153,7 +183,10 @@ export class BranchCoveragesService {
   ): Promise<{ list: BranchCoverageRow[]; total: number; page: number; pageSize: number }> {
     const page = dto.page ?? 1;
     const pageSize = Math.min(dto.pageSize ?? 10, 100);
+    const taskScope: 'full' | 'incremental' =
+      dto.taskScope === 'incremental' ? 'incremental' : 'full';
     const qb = this.repo.createQueryBuilder('bc').innerJoinAndSelect('bc.project', 'p');
+    qb.andWhere('bc.task_scope = :ts', { ts: taskScope });
     if (dto.projectId != null) {
       qb.andWhere('bc.project_id = :pid', { pid: dto.projectId });
     }
@@ -171,10 +204,12 @@ export class BranchCoveragesService {
   }
 
   private toRow(bc: BranchCoverage & { project: Project }): BranchCoverageRow {
+    const ts = bc.taskScope === 'incremental' ? 'incremental' : 'full';
     return {
       id: bc.id,
       projectId: bc.projectId,
       testBranch: bc.testBranch,
+      taskScope: ts,
       projectCode: bc.project.code,
       projectName: bc.project.name,
       createdAt: bc.createdAt,

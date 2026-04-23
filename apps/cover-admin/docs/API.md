@@ -19,7 +19,7 @@
 
 ## 二、覆盖率上报 `/api/coverage`
 
-供前端/SDK 上报 **Istanbul** 单文件 coverage（`statementMap` + `s` 等）。**公开 `@Public`，无需 JWT**。根据 **`X-Project-Code`**、**`X-Git-Branch`** 查找 `branch_coverage`；未配置时 **HTTP 200**，`{ "success": false, "message": "无此项目或者分支" }`。
+供前端/SDK 上报 **Istanbul** 单文件 coverage（`statementMap` + `s` 等）。**公开 `@Public`，无需 JWT**。根据 **`X-Project-Code`**、**`X-Git-Branch`**、**`X-Coverage-Task-Scope`（可选，默认 `full`）** 查找 `branch_coverage`，须与库中 **`task_scope`**（全量 / 增量任务）一致；未配置时 **HTTP 200**，`{ "success": false, "message": "…" }`。
 
 **同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file`，不新增记录。
 
@@ -36,6 +36,7 @@
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `X-Project-Code`     | 项目唯一 `code`（必填）                                                                                                                 |
 | `X-Git-Branch`       | 测试分支，须与「分支覆盖率」中 `test_branch` 一致（必填）                                                                               |
+| `X-Coverage-Task-Scope` | `full`（默认）或 `incremental`，须与对应 `branch_coverage.task_scope` 一致；增量任务上报须显式传 `incremental` |
 | `X-Git-Commit`       | 当前提交 SHA，写入 `coverage_report.git_commit`                                                                                         |
 | `X-Parent-Commit`    | 父提交；若库中已有该提交的 `coverage_report`，则对 **未出现在 `meta.fileChanges.*.resetLines` 中的行** 继承父提交「已覆盖」状态（见下） |
 | `X-Coverage-Mode`    | `full`（默认）或 `incremental`；与 `meta.mode` 二选一，**body.meta 优先**                                                               |
@@ -173,7 +174,7 @@
 
 ### 覆盖率详情（弹窗 / 可视化）
 
-**`POST /api/branch-coverages/coverage-report`**（`branch-coverage:detail`）：请求体 **`branchCoverageId`**（必填）；可选 **`reportId`**（指定某次 `coverage_report`，不传则取该分支覆盖率下**最新**一条）；可选 **`includeLineDetails`**（默认 `true`，为 `false` 时不返回每行 `lineDetails`，仅汇总与文件树，减小体积）。
+**`POST /api/branch-coverages/coverage-report`**（`branch-coverage:detail`）：请求体 **`branchCoverageId`**（必填）；可选 **`reportId`**（指定某次 `coverage_report`，不传则取该分支覆盖率下**最新**一条）；可选 **`includeLineDetails`**（默认 `true`，为 `false` 时不返回每行 `lineDetails`，仅汇总与文件树，减小体积）；可选 **`view`**：`full`（默认）或 **`incremental`**——**仅当**该 `branch_coverage` 的 **`task_scope` 为 `incremental`** 时允许；否则 **400**。为 `incremental` 时调用 GitHub **`{主分支}...{测试分支}`** compare API，仅在 unified diff 涉及的新文件侧行上重算汇总，文件树与 `files` 仅含能对齐路径且有 `patch` 的文件；行对象可带 **`diffMark`**（`+` / 空格表示上下文）。非 GitHub 仓库或 compare 失败时返回 **`diffContext.error`**，且 `files` 可能为空。
 
 - 成功且已有上报：返回 **`summary`**（总**行覆盖率** `coverageRatePercent`、各维度行数）、**`fileTree`**（目录树）、**`files[]`**（每文件 **`stats`**：插桩成功行、覆盖行、未覆盖行、未插桩、插桩失败；**`lineDetails`** 与上报入库一致；**`sourceHint`**：常见托管时可能含 **`rawFileUrl`**（与 `source-file` 同源规则），便于前端直接 `fetch` 源码后按行号着色）。
 - 尚无上报：**`empty: true`**，无 `report`。
@@ -189,12 +190,12 @@
 
 | 方法 | 路径                                    | 接口权限                 | 说明                                                                                                                                                                                                              |
 | ---- | --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST | `/api/branch-coverages/list`            | `branch-coverage:list`   | 请求体：可选 `projectId`（按项目筛选）、`keyword`（测试分支 / 项目名称 / 项目 code 模糊）、`page`、`pageSize`。返回项含 `id`、`projectId`、`testBranch`、`projectCode`、`projectName`、`createdAt`、`updatedAt`。 |
+| POST | `/api/branch-coverages/list`            | `branch-coverage:list`   | 请求体：可选 **`taskScope`**：`full`（默认）或 `incremental`，只返回该任务类型；可选 `projectId`、`keyword`、`page`、`pageSize`。返回项含 `id`、`projectId`、`testBranch`、**`taskScope`**、`projectCode`、`projectName`、`createdAt`、`updatedAt`。 |
 | POST | `/api/branch-coverages/detail`          | `branch-coverage:detail` | 请求体：`id`。                                                                                                                                                                                                    |
 | POST | `/api/branch-coverages/coverage-report` | `branch-coverage:detail` | 见上文「覆盖率详情」。                                                                                                                                                                                            |
 | POST | `/api/branch-coverages/source-file`     | `branch-coverage:detail` | 见上文「source-file」：按 `path` 从远程 HTTP raw 拉取与上报 commit 一致的源码正文。                                                                                                                               |
 | POST | `/api/branch-coverages/reset-coverage`  | `branch-coverage:update` | **清空覆盖率**：请求体 `branchCoverageId`。删除该配置下全部 `coverage_report`（级联删除 `coverage_file`），**不删除** `branch_coverage` 记录本身。返回 `deletedReportCount`。                                     |
-| POST | `/api/branch-coverages/create`          | `branch-coverage:create` | 请求体：`projectId`、`testBranch`。同一 `projectId` 下 `testBranch` 不可重复。                                                                                                                                    |
+| POST | `/api/branch-coverages/create`          | `branch-coverage:create` | 请求体：`projectId`、`testBranch`、可选 **`taskScope`**（`full` \| `incremental`，默认 `full`）。同一 `projectId` 下 **`test_branch` + `task_scope`** 不可重复。                                                                                                                                    |
 | POST | `/api/branch-coverages/update`          | `branch-coverage:update` | 请求体：`id`；可选 `projectId`、`testBranch`。                                                                                                                                                                    |
 | POST | `/api/branch-coverages/delete`          | `branch-coverage:delete` | 请求体：`id`。                                                                                                                                                                                                    |
 
@@ -244,7 +245,7 @@
 | POST | `/api/projects/create`                  | 创建项目                                 |
 | POST | `/api/projects/update`                  | 更新项目                                 |
 | POST | `/api/projects/delete`                  | 删除项目                                 |
-| POST | `/api/branch-coverages/list`            | 分支覆盖率分页列表                       |
+| POST | `/api/branch-coverages/list`            | 分支覆盖率分页列表（按 `taskScope` 区分全量/增量）                       |
 | POST | `/api/branch-coverages/detail`          | 分支覆盖率详情                           |
 | POST | `/api/branch-coverages/coverage-report` | 分支覆盖率上报详情（汇总、文件树、行级） |
 | POST | `/api/branch-coverages/source-file`     | 按文件路径从远程拉取源码（HTTP raw）     |
@@ -282,6 +283,7 @@
 | `menu.ui_permission`   | `/system/ui-permission`   | 菜单与按钮页                                                       |
 | `menu.project`         | `/system/project`         | 项目管理页                                                         |
 | `menu.branch_coverage` | `/system/branch-coverage` | 分支覆盖率页                                                       |
+| `menu.incremental_coverage` | `/system/incremental-coverage` | 增量覆盖率页（前端实际路由为 `/report/incremental-coverage`，与 UI 路径成对门禁） |
 | 其它 `btn.*`           | —                         | 各页内其余按钮                                                     |
 
 **种子「用户角色」**（`role.code = super_admin`，展示名可为「用户角色」）：种子通过 `INSERT INTO role_ui_permission SELECT 1, id FROM ui_permission` 绑定**全部** UI 节点；接口权限为 `SELECT 1, id FROM api_permission`；初始用户 `admin` 通过 `user_role` 绑定该角色。运行时**不**因 `super_admin` 编码而跳过上述绑定校验。

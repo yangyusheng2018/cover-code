@@ -17,6 +17,8 @@ export interface BranchCoverageRow {
   projectCode: string
   projectName: string
   testBranch: string
+  /** full=全量页任务 incremental=增量页任务 */
+  taskScope: 'full' | 'incremental'
 }
 
 function pickStr(v: unknown): string {
@@ -24,12 +26,15 @@ function pickStr(v: unknown): string {
 }
 
 function normalizeRow(raw: Record<string, unknown>): BranchCoverageRow {
+  const tsRaw = String(raw.taskScope ?? raw.task_scope ?? 'full').toLowerCase()
+  const taskScope: 'full' | 'incremental' = tsRaw === 'incremental' ? 'incremental' : 'full'
   return {
     id: Number(raw.id),
     projectId: Number(raw.projectId ?? raw.project_id),
     projectCode: pickStr(raw.projectCode ?? raw.project_code),
     projectName: pickStr(raw.projectName ?? raw.project_name),
     testBranch: pickStr(raw.testBranch ?? raw.test_branch),
+    taskScope,
   }
 }
 
@@ -38,6 +43,8 @@ export interface BranchCoverageListBody {
   projectId?: number
   page?: number
   pageSize?: number
+  /** 默认 full；与对应管理页一致 */
+  taskScope?: 'full' | 'incremental'
 }
 
 export interface BranchCoverageListResult {
@@ -48,7 +55,11 @@ export interface BranchCoverageListResult {
 }
 
 export async function listBranchCoverages(body: BranchCoverageListBody) {
-  const { data } = await http.post<unknown>('/api/branch-coverages/list', body)
+  const payload = {
+    ...body,
+    taskScope: body.taskScope === 'incremental' ? 'incremental' : 'full',
+  }
+  const { data } = await http.post<unknown>('/api/branch-coverages/list', payload)
   const d = unwrapApiEnvelope(data)
   return {
     list: (Array.isArray(d.list) ? d.list : []).map((r) =>
@@ -60,8 +71,15 @@ export async function listBranchCoverages(body: BranchCoverageListBody) {
   } satisfies BranchCoverageListResult
 }
 
-export async function createBranchCoverage(body: { projectId: number; testBranch: string }) {
-  await http.post('/api/branch-coverages/create', body)
+export async function createBranchCoverage(body: {
+  projectId: number
+  testBranch: string
+  taskScope?: 'full' | 'incremental'
+}) {
+  await http.post('/api/branch-coverages/create', {
+    ...body,
+    taskScope: body.taskScope === 'incremental' ? 'incremental' : 'full',
+  })
 }
 
 export async function updateBranchCoverage(body: {
@@ -452,11 +470,14 @@ function normalizeDetail(raw: Record<string, unknown>): BranchCoverageDetail {
 /** `POST /api/branch-coverages/coverage-report` Body: `{ branchCoverageId }`（整数 ≥1，勿传 `id`） */
 export async function fetchBranchCoverageDetail(
   branchCoverageId: number,
+  opts?: { view?: 'full' | 'incremental' },
 ): Promise<CoverageReportDetailVm> {
   const id = Math.trunc(Number(branchCoverageId))
-  const { data } = await http.post<unknown>('/api/branch-coverages/coverage-report', {
-    branchCoverageId: id,
-  })
+  const body: Record<string, unknown> = { branchCoverageId: id }
+  if (opts?.view) {
+    body.view = opts.view
+  }
+  const { data } = await http.post<unknown>('/api/branch-coverages/coverage-report', body)
   return parseCoverageReportResponse(data)
 }
 
