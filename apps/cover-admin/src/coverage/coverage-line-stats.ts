@@ -11,6 +11,27 @@ export interface FileLineStats {
   fail: number;
 }
 
+/** 增量详情：仅「相对主分支为 diff + 侧」的行参与插桩/覆盖统计（空格上下文行排除）。 */
+export function isIncrementalDiffCountedLine(d: CoverageLineDetail): boolean {
+  if (d.diffMark === '+') {
+    return true;
+  }
+  if (d.diffMark === ' ') {
+    return false;
+  }
+  return d.inScope === true;
+}
+
+/**
+ * 增量「分支 diff」视图：仅统计 unified diff **新侧 `+` 行**（相对主分支有变更/新增），
+ * 不把空格上下文行（与主分支一致）计入覆盖/未覆盖分母。
+ */
+export function summarizeLineDetailsForDiffPlusOnly(
+  details: CoverageLineDetail[],
+): FileLineStats {
+  return summarizeLineDetails(details.filter(isIncrementalDiffCountedLine));
+}
+
 export function summarizeLineDetails(details: CoverageLineDetail[]): FileLineStats {
   let instrumentOk = 0;
   let covered = 0;

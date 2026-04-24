@@ -14,6 +14,7 @@ import {
   lineCoverageRatePercent,
   mergeFileStats,
   summarizeLineDetails,
+  summarizeLineDetailsForDiffPlusOnly,
 } from './coverage-line-stats';
 import type { CoverageLineDetail } from './coverage-line-types';
 import { CoverageBranchDiffService } from './coverage-branch-diff.service';
@@ -129,26 +130,32 @@ export class CoverageReportDetailService {
       const details = row.lineDetails ?? [];
       let filtered: CoverageLineDetail[] = details
         .filter((d) => marks.has(d.line))
-        .map((d) => ({
-          ...d,
-          diffMark: marks.get(d.line) ?? ' ',
-        }));
+        .map((d) => {
+          const dm = marks.get(d.line) ?? ' ';
+          return {
+            ...d,
+            diffMark: dm,
+            /** 仅 `+` 行参与增量覆盖率统计；空格行为与主分支一致的上下文 */
+            inScope: dm === '+',
+          };
+        });
 
       if (!filtered.length) {
         filtered = [...marks.keys()]
           .sort((a, b) => a - b)
-          .map((line) => ({
-            line,
-            inScope: true,
-            instrument: 'none' as const,
-            covered: null,
-            diffMark: marks.get(line) ?? ' ',
-          }));
+          .map((line) => {
+            const dm = marks.get(line) ?? ' ';
+            return {
+              line,
+              inScope: dm === '+',
+              instrument: 'none' as const,
+              covered: null,
+              diffMark: dm,
+            };
+          });
       }
 
-      const stats = summarizeLineDetails(
-        filtered.map(({ diffMark: _dm, ...rest }) => rest),
-      );
+      const stats = summarizeLineDetailsForDiffPlusOnly(filtered);
       const outRow: (typeof mappedInc)[0] = {
         path: row.path,
         stats,

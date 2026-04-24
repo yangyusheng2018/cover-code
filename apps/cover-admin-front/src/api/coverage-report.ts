@@ -96,10 +96,19 @@ export interface CoverageReportDetailVm {
   diffContext?: CoverageDiffContextVm | null
 }
 
-/** 行着色：与后端 instrument / covered 一致 */
-export type UiLineState = 'neutral' | 'covered' | 'missed' | 'fail'
+/**
+ * 行着色：与后端 instrument / covered 一致。
+ * `diffContext`：增量详情里与主分支一致的 diff 上下文行（不计入增量分母），蓝色底。
+ */
+export type UiLineState = 'neutral' | 'covered' | 'missed' | 'fail' | 'diffContext'
 
-export function mapBackendLineToUiState(d: CoverageLineDetailDto): UiLineState {
+export function mapBackendLineToUiState(
+  d: CoverageLineDetailDto,
+  incrementalDetail?: boolean,
+): UiLineState {
+  if (incrementalDetail && (d.diffMark === ' ' || d.inScope === false)) {
+    return 'diffContext'
+  }
   if (d.instrument === 'none' || d.instrument === 'unknown') {
     return 'neutral'
   }

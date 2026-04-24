@@ -2,7 +2,12 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '@/api/branchCoverages'
-import type { CoverageReportDetailVm, CoverageReportSummaryRow } from '@/api/branchCoverages'
+import type {
+  CoverageLineDetailDto,
+  CoverageReportDetailVm,
+  CoverageReportFileVm,
+  CoverageReportSummaryRow,
+} from '@/api/branchCoverages'
 import {
   mapBackendLineToUiState,
   type CoverageFileTreeNode,
@@ -42,6 +47,74 @@ function formatReportOptionLabel(r: CoverageReportSummaryRow): string {
   return `#${r.id} · ${short}${t ? ` · 更新 ${t}` : ''}`
 }
 
+/** 与后端增量统计一致：仅 diff 新侧 `+` 行；空格上下文行排除（`diffMark` 缺失时以 `inScope` 兜底） */
+function isIncrementalDiffCountedRow(d: CoverageLineDetailDto): boolean {
+  if (d.diffMark === '+') {
+    return true
+  }
+  if (d.diffMark === ' ') {
+    return false
+  }
+  return Boolean(d.inScope)
+}
+
+function statsFromIncrementalDiffPlusLines(
+  lineDetails: CoverageLineDetailDto[] | undefined,
+): CoverageReportFileVm['stats'] {
+  const out: CoverageReportFileVm['stats'] = {
+    instrumentOk: 0,
+    covered: 0,
+    uncovered: 0,
+    none: 0,
+    fail: 0,
+  }
+  if (!lineDetails?.length) {
+    return out
+  }
+  for (const d of lineDetails) {
+    if (!isIncrementalDiffCountedRow(d)) {
+      continue
+    }
+    switch (d.instrument) {
+      case 'ok':
+        out.instrumentOk++
+        if (d.covered === true) {
+          out.covered++
+        } else if (d.covered === false) {
+          out.uncovered++
+        }
+        break
+      case 'none':
+        out.none++
+        break
+      case 'fail':
+        out.fail++
+        break
+      default:
+        out.none++
+    }
+  }
+  return out
+}
+
+function mergeFileStatsRows(stats: CoverageReportFileVm['stats'][]): CoverageReportFileVm['stats'] {
+  const out: CoverageReportFileVm['stats'] = {
+    instrumentOk: 0,
+    covered: 0,
+    uncovered: 0,
+    none: 0,
+    fail: 0,
+  }
+  for (const s of stats) {
+    out.instrumentOk += s.instrumentOk
+    out.covered += s.covered
+    out.uncovered += s.uncovered
+    out.none += s.none
+    out.fail += s.fail
+  }
+  return out
+}
+
 /** 按后端 fileTree 转 el-tree；无树时按 path 列表生成 */
 const treeData = computed((): CoverageTreeItem[] => {
   const d = detail.value
@@ -73,10 +146,40 @@ function mapServerNode(n: CoverageFileTreeNode): CoverageTreeItem {
   }
 }
 
+/** 增量模式下按行详情重算各文件 stats，与弹窗源码区一致（不依赖 summary 是否与行级同步） */
+const detailFilesView = computed((): CoverageReportFileVm[] => {
+  const d = detail.value
+  if (!d?.files.length) {
+    return []
+  }
+  if (!props.incrementalView) {
+    return d.files
+  }
+  return d.files.map((f) => ({
+    ...f,
+    stats: statsFromIncrementalDiffPlusLines(f.lineDetails),
+  }))
+})
+
 const summaryTotals = computed(() => {
   const s = detail.value?.summary
   if (!s) {
     return null
+  }
+  if (props.incrementalView && detail.value?.files.length) {
+    const merged = mergeFileStatsRows(
+      detail.value.files.map((f) => statsFromIncrementalDiffPlusLines(f.lineDetails)),
+    )
+    const denom = merged.covered + merged.uncovered
+    const pct = denom === 0 ? null : Math.round((merged.covered / denom) * 10000) / 100
+    return {
+      pct,
+      instrumented: merged.instrumentOk,
+      covered: merged.covered,
+      uncovered: merged.uncovered,
+      none: merged.none,
+      fail: merged.fail,
+    }
   }
   return {
     pct: s.coverageRatePercent,
@@ -93,7 +196,7 @@ const currentFile = computed(() => {
   if (!p || !detail.value) {
     return null
   }
-  return detail.value.files.find((f) => f.path === p) ?? null
+  return detailFilesView.value.find((f) => f.path === p) ?? null
 })
 
 /** 服务端 `source-file` 拉取结果缓存 */
@@ -175,7 +278,13 @@ const displayLines = computed(() => {
   const path = selectedFilePath.value
   const f = currentFile.value
   if (!f || !path) {
-    return [] as { lineNumber: number; text: string; state: UiLineState; diffMark?: '+' | ' ' }[]
+    return [] as {
+      lineNumber: number
+      text: string
+      state: UiLineState
+      diffMark?: '+' | ' '
+      inScope?: boolean
+    }[]
   }
   const src = sourceLinesCache.value[path] ?? []
   if (props.incrementalView && f.lineDetails?.length) {
@@ -185,8 +294,9 @@ const displayLines = computed(() => {
       .map((d) => ({
         lineNumber: d.line,
         text: src[d.line - 1] ?? '',
-        state: mapBackendLineToUiState(d),
+        state: mapBackendLineToUiState(d, true),
         diffMark: d.diffMark,
+        inScope: d.inScope,
       }))
   }
   const map = new Map(f.lineDetails.map((d) => [d.line, d]))
@@ -199,7 +309,13 @@ const displayLines = computed(() => {
   if (maxLine === 0 && f.lineDetails.length) {
     maxLine = Math.max(...f.lineDetails.map((d) => d.line))
   }
-  const out: { lineNumber: number; text: string; state: UiLineState; diffMark?: '+' | ' ' }[] = []
+  const out: {
+    lineNumber: number
+    text: string
+    state: UiLineState
+    diffMark?: '+' | ' '
+    inScope?: boolean
+  }[] = []
   for (let i = 1; i <= maxLine; i++) {
     const d = map.get(i)
     const text = src[i - 1] ?? (d ? '\u2003' : '')
@@ -327,6 +443,9 @@ function lineClass(state: UiLineState) {
   if (state === 'fail') {
     return 'cov-line cov-line--fail'
   }
+  if (state === 'diffContext') {
+    return 'cov-line cov-line--diff-context'
+  }
   return 'cov-line cov-line--neutral'
 }
 </script>
@@ -428,13 +547,13 @@ function lineClass(state: UiLineState) {
           <span class="legend-i legend-i--missed">未覆盖</span>
           <span class="legend-i legend-i--fail">插桩失败</span>
           <template v-if="incrementalView">
-            <span class="legend-i legend-i--diffadd">diff + 新增行</span>
-            <span class="legend-i legend-i--diffctx">diff 上下文行</span>
+            <span class="legend-i legend-i--diffadd">diff + 变更/新增（计入增量）</span>
+            <span class="legend-i legend-i--diffctx">与主分支一致（不计入增量）</span>
           </template>
         </div>
 
         <el-table
-          :data="detail.files"
+          :data="detailFilesView"
           border
           size="small"
           class="detail-file-table"
@@ -484,7 +603,9 @@ function lineClass(state: UiLineState) {
           </div>
           <div class="detail-source">
             <div class="detail-source__caption">
-              {{ incrementalView ? '源码与 diff（仅对比涉及行）' : '源码（与行级数据对齐）' }}
+              {{
+                incrementalView ? '源码与 diff（+ 为变更行；空格行为与主分支一致的上下文）' : '源码（与行级数据对齐）'
+              }}
               <span v-if="currentFile" class="detail-source__path">{{ currentFile.path }}</span>
             </div>
             <p v-if="currentSourceMeta?.commit" class="detail-source__hint">
@@ -648,8 +769,8 @@ function lineClass(state: UiLineState) {
 }
 
 .legend-i--diffctx {
-  background: #eceff1;
-  color: #546e7a;
+  background: #e3f2fd;
+  color: #1565c0;
 }
 
 .diff-range-hint {
@@ -762,6 +883,11 @@ function lineClass(state: UiLineState) {
 .cov-line--fail {
   background: #fdf6ec;
   border-left-color: #e6a23c;
+}
+
+.cov-line--diff-context {
+  background: #e3f2fd;
+  border-left-color: #409eff;
 }
 
 :deep(.el-tree-node__content) {
