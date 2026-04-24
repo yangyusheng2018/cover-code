@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { CoverageManualMarkKind } from '@/api/branchCoverages'
 import { ElMessage } from 'element-plus'
 import * as api from '@/api/branchCoverages'
@@ -42,6 +43,7 @@ const selectedFilePath = ref<string | null>(null)
 const selectedFiles = ref<CoverageReportFileVm[]>([])
 /** 当前文件源码行多选（行号） */
 const selectedLineNums = ref<number[]>([])
+const selectedLineSet = computed(() => new Set(selectedLineNums.value))
 
 /** 该分支下全部上报（多 commit）；默认选「最近更新」第一条，与后端 `coverage-reports` 排序一致 */
 const reportOptions = ref<CoverageReportSummaryRow[]>([])
@@ -239,6 +241,79 @@ function toggleLineSelection(line: number, checked: boolean) {
     selectedLineNums.value = selectedLineNums.value.filter((n) => n !== line)
   }
 }
+
+/** 左侧 gutter：短按切换选中；移入其他行或长按后开始范围选择 */
+const LINE_PRESS_MS = 280
+const linePressAnchor = ref<number | null>(null)
+const lineDragSelecting = ref(false)
+let linePressTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearLinePressTimer() {
+  if (linePressTimer) {
+    clearTimeout(linePressTimer)
+    linePressTimer = null
+  }
+}
+
+function applyLineRangeSelection(a: number, b: number) {
+  const lo = Math.min(a, b)
+  const hi = Math.max(a, b)
+  const next: number[] = []
+  for (let n = lo; n <= hi; n++) {
+    next.push(n)
+  }
+  selectedLineNums.value = next
+}
+
+function onLineGutterDown(line: number) {
+  if (!canManualMark.value) {
+    return
+  }
+  linePressAnchor.value = line
+  lineDragSelecting.value = false
+  clearLinePressTimer()
+  linePressTimer = setTimeout(() => {
+    linePressTimer = null
+    lineDragSelecting.value = true
+    applyLineRangeSelection(line, line)
+  }, LINE_PRESS_MS)
+  window.addEventListener('mouseup', onWindowLineGutterUp, true)
+}
+
+function onLineRowEnter(line: number) {
+  const anchor = linePressAnchor.value
+  if (anchor == null) {
+    return
+  }
+  if (lineDragSelecting.value) {
+    applyLineRangeSelection(anchor, line)
+    return
+  }
+  if (line !== anchor) {
+    clearLinePressTimer()
+    lineDragSelecting.value = true
+    applyLineRangeSelection(anchor, line)
+  }
+}
+
+function onWindowLineGutterUp() {
+  window.removeEventListener('mouseup', onWindowLineGutterUp, true)
+  clearLinePressTimer()
+  const anchor = linePressAnchor.value
+  if (anchor == null) {
+    return
+  }
+  if (!lineDragSelecting.value) {
+    toggleLineSelection(anchor, !selectedLineSet.value.has(anchor))
+  }
+  linePressAnchor.value = null
+  lineDragSelecting.value = false
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mouseup', onWindowLineGutterUp, true)
+  clearLinePressTimer()
+})
 
 async function submitManualMarks(
   items: Array<{
@@ -567,8 +642,8 @@ function lineClass(state: UiLineState) {
   return 'cov-line cov-line--neutral'
 }
 
-function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
-  return m === 'redundant_covered' ? '冗余·已覆盖' : '插桩排除'
+function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
+  return m === 'redundant_covered' ? '人工标记：冗余已覆盖' : '人工标记：插桩排除（移出统计）'
 }
 </script>
 
@@ -672,8 +747,12 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
             <span class="legend-i legend-i--diffadd">diff + 变更/新增（计入增量）</span>
             <span class="legend-i legend-i--diffctx">与主分支一致（不计入增量）</span>
           </template>
-          <span class="legend-i legend-i--manual-red">人工·冗余已覆盖</span>
-          <span class="legend-i legend-i--manual-exc">人工·插桩排除</span>
+          <span class="legend-i legend-i--manual-red" title="人工·冗余已覆盖">
+            <el-icon class="legend-i__icon"><CircleCheck /></el-icon>
+          </span>
+          <span class="legend-i legend-i--manual-exc" title="人工·插桩排除">
+            <el-icon class="legend-i__icon"><CircleClose /></el-icon>
+          </span>
         </div>
 
         <div v-if="canManualMark" class="manual-toolbar manual-toolbar--files">
@@ -775,7 +854,7 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
               class="mb"
             />
             <div v-if="canManualMark && currentFile" class="manual-toolbar manual-toolbar--lines">
-              <span class="manual-toolbar__label">当前文件行（勾选多行）</span>
+              <span class="manual-toolbar__label">当前文件行（最左侧点击切换，按住拖过可多选）</span>
               <el-button
                 type="primary"
                 plain
@@ -803,28 +882,37 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
                   <div
                     v-for="ln in displayLines"
                     :key="`${currentFile.path}:${ln.lineNumber}`"
-                    :class="lineClass(ln.state)"
+                    :class="[
+                      lineClass(ln.state),
+                      { 'cov-line--line-selected': selectedLineSet.has(ln.lineNumber) },
+                    ]"
+                    @mouseenter="onLineRowEnter(ln.lineNumber)"
                   >
-                    <el-checkbox
+                    <div
                       v-if="canManualMark"
-                      class="source-code__chk"
-                      :model-value="selectedLineNums.includes(ln.lineNumber)"
-                      @change="
-                        (v: string | number | boolean) =>
-                          toggleLineSelection(ln.lineNumber, v === true)
-                      "
+                      class="source-code__gutter"
+                      title="点击切换选中；从最左侧按下拖过可多选"
+                      @mousedown.prevent="onLineGutterDown(ln.lineNumber)"
                     />
-                    <span v-else class="source-code__chk-spacer" />
+                    <div v-else class="source-code__gutter source-code__gutter--idle" />
                     <span v-if="incrementalView" class="source-code__diff" aria-hidden="true">{{
                       ln.diffMark === '+' ? '+' : ' '
                     }}</span>
                     <span class="source-code__no">{{ ln.lineNumber }}</span>
-                    <span
-                      v-if="ln.manualMark"
-                      class="source-code__manual"
-                      :title="manualMarkLabel(ln.manualMark)"
-                      >{{ manualMarkLabel(ln.manualMark) }}</span
+                    <el-icon
+                      v-if="ln.manualMark === 'redundant_covered'"
+                      class="source-code__manual-icon source-code__manual-icon--redundant"
+                      :title="manualMarkTitle('redundant_covered')"
                     >
+                      <CircleCheck />
+                    </el-icon>
+                    <el-icon
+                      v-else-if="ln.manualMark === 'instrument_excluded'"
+                      class="source-code__manual-icon source-code__manual-icon--excluded"
+                      :title="manualMarkTitle('instrument_excluded')"
+                    >
+                      <CircleClose />
+                    </el-icon>
                     <span class="source-code__text">{{ ln.text }}</span>
                   </div>
                 </div>
@@ -965,13 +1053,31 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
 }
 
 .legend-i--manual-red {
-  background: #e8eaf6;
-  color: #3949ab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  background: #e8f5e9;
 }
 
 .legend-i--manual-exc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
   background: #fff8e1;
-  color: #f57f17;
+}
+
+.legend-i__icon {
+  font-size: 14px;
+}
+
+.legend-i--manual-red .legend-i__icon {
+  color: #67c23a;
+}
+
+.legend-i--manual-exc .legend-i__icon {
+  color: #e6a23c;
 }
 
 .manual-toolbar {
@@ -1051,36 +1157,56 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
   white-space: pre;
 }
 
 .cov-line {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 0 4px;
+  gap: 4px;
+  padding: 0 2px;
   border-left: 3px solid transparent;
 }
 
-.source-code__chk {
-  flex: 0 0 auto;
-  margin-top: 2px;
+.source-code__gutter {
+  flex: 0 0 18px;
+  width: 18px;
+  min-height: 1.28em;
+  margin-top: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  align-self: stretch;
+  background: transparent;
 }
 
-.source-code__chk-spacer {
-  flex: 0 0 22px;
+.source-code__gutter:hover {
+  background: rgba(64, 158, 255, 0.12);
 }
 
-.source-code__manual {
+.source-code__gutter--idle {
+  cursor: default;
+  pointer-events: none;
+}
+
+.cov-line--line-selected .source-code__gutter {
+  background: rgba(64, 158, 255, 0.18);
+}
+
+.source-code__manual-icon {
   flex: 0 0 auto;
-  font-size: 11px;
-  padding: 0 6px;
-  border-radius: 3px;
-  background: #ede7f6;
-  color: #5e35b1;
-  white-space: nowrap;
-  margin-top: 1px;
+  font-size: 13px;
+  margin-top: 0;
+  align-self: center;
+}
+
+.source-code__manual-icon--redundant {
+  color: #67c23a;
+}
+
+.source-code__manual-icon--excluded {
+  color: #e6a23c;
 }
 
 .source-code__diff {
@@ -1092,10 +1218,11 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
 }
 
 .source-code__no {
-  flex: 0 0 44px;
+  flex: 0 0 38px;
   text-align: right;
   color: #909399;
   user-select: none;
+  font-size: 11px;
 }
 
 .source-code__text {
@@ -1128,6 +1255,10 @@ function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
 .cov-line--diff-context {
   background: #e3f2fd;
   border-left-color: #409eff;
+}
+
+.cov-line--line-selected {
+  box-shadow: inset 2px 0 0 0 #409eff;
 }
 
 :deep(.el-tree-node__content) {
