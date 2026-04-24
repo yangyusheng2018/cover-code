@@ -4,6 +4,7 @@ import { describeScore } from "./utils";
 export function App(): JSX.Element {
   const [score, setScore] = useState(0);
   const [count, setCount] = useState(0);
+  const [sum, setSum] = useState(0);
   const bump = () => {
     console.log('测试率')
     if(score > 5){
@@ -35,6 +36,22 @@ export function App(): JSX.Element {
       console.log('count <= 5');  
     }
     setCount((c) => c + 1);
+  };
+  const addSum = () => {
+    console.log('sum')
+    if(sum > 5){  
+      console.log('sum > 5');
+      console.log('sum > 5');
+      console.log('sum > 522');
+      console.log('sum > 5');
+      console.log('sum > 5');
+    }else{
+      console.log('sum <= 5');  
+      console.log('sum <= 52');  
+      console.log('sum <= 5');  
+      console.log('sum <= 5');  
+    }
+    setSum((s) => s + 1);
   };
   const nouse=()=>{
     console.log('nouse')
