@@ -9,20 +9,7 @@ export function App(): JSX.Element {
     if(score > 5){
       console.log('score > 5');
       console.log('score > 5');
-      console.log('score > 5');
-      console.log('插入测试行');
-      console.log('插入测试行');  
-      console.log('插入测试行');     console.log('插入测试行11');
-      console.log('插入测试行');       console.log('插入测试行11');
-      console.log('插入测试行'); 
-      console.log('score > 5');
     }else{
-      console.log('score <= 5');  
-      console.log('score <= 5');  
-      console.log('score <= 5'); 
-      console.log('插入测试行11');
-      console.log('插入测试行11'); 
-      console.log('score <= 511');  
       console.log('score <= 5');  
       console.log('score <= 5');  
       console.log('score <= 5');  
@@ -34,14 +21,14 @@ export function App(): JSX.Element {
     if(count > 5){
       console.log('count > 5');
       console.log('count > 5');
-      console.log('count > 5');
+      console.log('count > 522');
       console.log('count > 5');
       console.log('count > 5');
       console.log('count > 5');
     }else{
       console.log('count <= 5');  
       console.log('count <= 5');  
-      console.log('count <= 5111');  
+      console.log('count <= 52');  
       console.log('count <= 5');  
       console.log('count <= 5');  
       console.log('count <= 5');  
