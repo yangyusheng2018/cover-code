@@ -21,7 +21,9 @@
 
 供前端/SDK 上报 **Istanbul** 单文件 coverage（`statementMap` + `s` 等）。**公开 `@Public`，无需 JWT**。根据 **`X-Project-Code`**、**`X-Git-Branch`** 查找 `branch_coverage`（**每个项目 + 测试分支至多一条**配置；**不**根据 `X-Coverage-Task-Scope` 等头区分）。未配置时 **HTTP 200**，`{ "success": false, "message": "无此项目或者分支" }`。
 
-**同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file`，不新增记录。
+**同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file` 行级数据，不新增记录。入库前会将本次 Istanbul 解析结果与 **库内该提交已有快照** 做行级合并：若某行本次未覆盖但此前已标记为已覆盖，则仍保留为已覆盖（`carried: true`），避免浏览器刷新导致 `__coverage__` 归零后再次上报把历史覆盖「冲掉」。**之后**再按 `meta.parentCommit` / `X-Parent-Commit` 与父提交报告合并（见下），顺序为：先粘合同提交历史，再应用父提交继承与 `resetLines`。
+
+**多版本与代码变更**：库表对 `(branch_coverage_id, git_commit)` 唯一；**不同提交**会各占一条 `coverage_report`，历史版本保留。同一分支上修改代码并产生新 commit 后，应使用 **新的 `X-Git-Commit`** 上报；对比「改前 / 改后」覆盖可在管理端分别打开各 commit 的报告，或（增量任务）结合 Git diff 查看。若需在**同一 commit** 上强制以本次上报为准、丢弃历史粘性行为，可先调用管理端「重置覆盖率」清空该配置下上报，或使用 `meta.fileChanges.*.resetLines` 指定需重算的行。
 
 **Source map 与原始源码行号**：服务端在入库前使用 **`istanbul-lib-coverage`** 与 **`istanbul-lib-source-maps`**，对整份 Istanbul payload 做一次 **`transformCoverage`**：若各文件 coverage 上带有 **`inputSourceMap`**（或后续扩展注册外链 map），则将 **statementMap / fnMap / branchMap** 等位置映射回 **原始源文件**，再计算 `line_details` 行号。无可用 source map 时行为与旧版一致。映射过程若抛错，会 **记录告警并回退** 为未映射的原始数据，避免上报失败。
 
@@ -66,7 +68,7 @@
 | `inScope`    | 增量：是否属于 diff 范围；全量恒 `true` |
 | `instrument` | `none` \| `ok` \| `fail`                |
 | `covered`    | 仅 `ok` 时为布尔；否则 `null`           |
-| `carried`    | 可选：是否由父提交继承的已覆盖          |
+| `carried`    | 可选：是否由 **父提交** 或 **同一 commit 上一次入库** 继承的已覆盖          |
 
 | 方法 | 路径                   | 鉴权           | 说明                                                                                                                                                                                                                  |
 | ---- | ---------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

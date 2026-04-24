@@ -120,6 +120,22 @@ export class CoverageService {
       }
     }
 
+    /** 同一 (branch_coverage, git_commit) 已入库快照：用于多次上报时「粘性」合并，避免关页后 __coverage__ 归零再次上报冲掉历史已覆盖行 */
+    const stickySameCommitMap = new Map<string, CoverageLineDetail[]>();
+    const stickyWhere =
+      gc === null
+        ? { branchCoverageId: bc.id, gitCommit: IsNull() }
+        : { branchCoverageId: bc.id, gitCommit: gc };
+    const stickyReport = await this.reportRepo.findOne({ where: stickyWhere });
+    if (stickyReport) {
+      const stickyFiles = await this.fileRepo.find({
+        where: { reportId: stickyReport.id },
+      });
+      for (const f of stickyFiles) {
+        stickySameCommitMap.set(f.path, f.lineDetails);
+      }
+    }
+
     type Row = {
       path: string;
       lineDetails: CoverageLineDetail[];
@@ -161,9 +177,13 @@ export class CoverageService {
       if (!fresh?.length) continue;
 
       let lineDetails = fresh;
+      const stickyPrev = stickySameCommitMap.get(path);
+      if (stickyPrev?.length) {
+        lineDetails = mergeParentLineDetails(lineDetails, stickyPrev, new Set());
+      }
       const parentDetail = parentFilesMap.get(path);
       if (parentCommitNorm && parentDetail?.length) {
-        lineDetails = mergeParentLineDetails(fresh, parentDetail, resetLines);
+        lineDetails = mergeParentLineDetails(lineDetails, parentDetail, resetLines);
       }
 
       const { coveredLines, uncoveredLines } =
