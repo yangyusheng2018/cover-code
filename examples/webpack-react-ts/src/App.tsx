@@ -8,22 +8,7 @@ export function App(): JSX.Element {
     console.log('测试率')
     if(score > 5){
       console.log('score > 5');
-      console.log('score > 5');
-      console.log('score > 5');
-      console.log('插入测试行1');
-      console.log('插入测试行');
-      console.log('score > 5');
-      console.log('score > 5');
-      console.log('score > 5');
     }else{
-      console.log('score <= 5');  
-      console.log('score <= 5');  
-      console.log('score <= 5'); 
-      console.log('插入测试行');
-      console.log('插入测试行1111');
-      console.log('插入测试行'); 
-      console.log('score <= 5');  
-      console.log('score <= 5');  
       console.log('score <= 5');  
       console.log('score <= 5');  
     }
