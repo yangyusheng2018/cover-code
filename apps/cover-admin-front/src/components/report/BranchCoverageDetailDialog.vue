@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as api from '@/api/branchCoverages'
-import type { CoverageReportDetailVm } from '@/api/branchCoverages'
+import type { CoverageReportDetailVm, CoverageReportSummaryRow } from '@/api/branchCoverages'
 import {
   mapBackendLineToUiState,
   type CoverageFileTreeNode,
@@ -30,6 +30,17 @@ const loading = ref(false)
 const detail = ref<CoverageReportDetailVm | null>(null)
 const treeRef = ref()
 const selectedFilePath = ref<string | null>(null)
+
+/** 该分支下全部上报（多 commit）；默认选「最近更新」第一条，与后端 `coverage-reports` 排序一致 */
+const reportOptions = ref<CoverageReportSummaryRow[]>([])
+const selectedReportId = ref<number | undefined>(undefined)
+
+function formatReportOptionLabel(r: CoverageReportSummaryRow): string {
+  const sha = r.gitCommit?.trim() || '未传 commit'
+  const short = sha.length > 14 ? `${sha.slice(0, 8)}…${sha.slice(-4)}` : sha
+  const t = r.updatedAt?.replace('T', ' ').slice(0, 19) ?? ''
+  return `#${r.id} · ${short}${t ? ` · 更新 ${t}` : ''}`
+}
 
 /** 按后端 fileTree 转 el-tree；无树时按 path 列表生成 */
 const treeData = computed((): CoverageTreeItem[] => {
@@ -198,18 +209,59 @@ const displayLines = computed(() => {
   return out
 })
 
-async function loadDetail() {
+async function loadDetailCore() {
   const id = props.branchCoverageId
   if (id == null) {
     detail.value = null
     return
   }
+  detail.value = await api.fetchBranchCoverageDetail(id, {
+    view: props.incrementalView ? 'incremental' : undefined,
+    reportId: selectedReportId.value,
+  })
+}
+
+async function loadReportOptionsAndDetail() {
+  const id = props.branchCoverageId
+  if (id == null) {
+    detail.value = null
+    reportOptions.value = []
+    selectedReportId.value = undefined
+    return
+  }
   loading.value = true
   try {
-    detail.value = await api.fetchBranchCoverageDetail(id, {
-      view: props.incrementalView ? 'incremental' : undefined,
-    })
-    const first = detail.value.files[0]?.path ?? null
+    try {
+      const { list } = await api.fetchBranchCoverageReportSummaries(id)
+      reportOptions.value = list
+      selectedReportId.value = list[0]?.id
+    } catch {
+      reportOptions.value = []
+      selectedReportId.value = undefined
+    }
+    await loadDetailCore()
+    const first = detail.value?.files[0]?.path ?? null
+    selectedFilePath.value = first
+    await nextTickSelectTree()
+  } catch (e: unknown) {
+    detail.value = null
+    const msg =
+      (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+    ElMessage.error(Array.isArray(msg) ? msg.join('；') : msg || '加载详情失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function onReportChange(reportId: number) {
+  selectedReportId.value = reportId
+  sourceLinesCache.value = {}
+  sourceMetaCache.value = {}
+  sourceError.value = ''
+  loading.value = true
+  try {
+    await loadDetailCore()
+    const first = detail.value?.files[0]?.path ?? null
     selectedFilePath.value = first
     await nextTickSelectTree()
   } catch (e: unknown) {
@@ -242,10 +294,12 @@ watch(
   () => [props.modelValue, props.branchCoverageId, props.incrementalView] as const,
   ([open, id]) => {
     if (open && id != null) {
-      void loadDetail()
+      void loadReportOptionsAndDetail()
     }
     if (!open) {
       detail.value = null
+      reportOptions.value = []
+      selectedReportId.value = undefined
       selectedFilePath.value = null
       sourceLinesCache.value = {}
       sourceMetaCache.value = {}
@@ -307,6 +361,24 @@ function lineClass(state: UiLineState) {
           对比范围：<strong>{{ detail.diffContext.baseBranch }}</strong>（主分支）→
           <strong>{{ detail.diffContext.headBranch }}</strong>（测试分支）· GitHub
         </p>
+        <div v-if="reportOptions.length" class="report-picker">
+          <span class="report-picker__label">上报记录</span>
+          <el-select
+            :model-value="selectedReportId"
+            filterable
+            placeholder="选择 commit / 上报版本"
+            style="width: min(100%, 520px)"
+            @update:model-value="(v: number) => onReportChange(v)"
+          >
+            <el-option
+              v-for="r in reportOptions"
+              :key="r.id"
+              :label="formatReportOptionLabel(r)"
+              :value="r.id"
+            />
+          </el-select>
+          <span class="report-picker__hint">默认展示最近更新时间最新的一条；其它 commit 数据仍保留，可在此切换。</span>
+        </div>
         <el-alert
           v-if="incrementalView && !detail.diffContext?.error && !detail.files.length && !detail.empty"
           type="warning"
@@ -473,6 +545,28 @@ function lineClass(state: UiLineState) {
 
 .mb {
   margin-bottom: 8px;
+}
+
+.report-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+  padding: 8px 0;
+}
+
+.report-picker__label {
+  font-size: 13px;
+  color: #606266;
+  flex-shrink: 0;
+}
+
+.report-picker__hint {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.4;
+  flex: 1 1 200px;
 }
 
 .source-panel-inner {

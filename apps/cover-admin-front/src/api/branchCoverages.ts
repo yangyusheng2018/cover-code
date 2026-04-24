@@ -467,15 +467,54 @@ function normalizeDetail(raw: Record<string, unknown>): BranchCoverageDetail {
   }
 }
 
+/** `POST /api/branch-coverages/coverage-reports`：该分支下全部上报摘要（多 commit） */
+export interface CoverageReportSummaryRow {
+  id: number
+  gitCommit: string | null
+  fileCount: number
+  coverageMode: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function fetchBranchCoverageReportSummaries(
+  branchCoverageId: number,
+): Promise<{ list: CoverageReportSummaryRow[] }> {
+  const id = Math.trunc(Number(branchCoverageId))
+  const { data } = await http.post<unknown>('/api/branch-coverages/coverage-reports', {
+    branchCoverageId: id,
+  })
+  const d = unwrapApiEnvelope(data) as Record<string, unknown>
+  const rawList = Array.isArray(d.list) ? d.list : []
+  const list = rawList.map((r) => {
+    const o = (r ?? {}) as Record<string, unknown>
+    return {
+      id: pickNum(o.id, 0),
+      gitCommit: o.gitCommit == null || o.gitCommit === '' ? null : String(o.gitCommit),
+      fileCount: pickNum(o.fileCount ?? o.file_count, 0),
+      coverageMode: pickStr(o.coverageMode ?? o.coverage_mode) || 'full',
+      createdAt: o.createdAt != null ? String(o.createdAt) : o.created_at != null ? String(o.created_at) : undefined,
+      updatedAt: o.updatedAt != null ? String(o.updatedAt) : o.updated_at != null ? String(o.updated_at) : undefined,
+    } satisfies CoverageReportSummaryRow
+  })
+  return { list }
+}
+
 /** `POST /api/branch-coverages/coverage-report` Body: `{ branchCoverageId }`（整数 ≥1，勿传 `id`） */
 export async function fetchBranchCoverageDetail(
   branchCoverageId: number,
-  opts?: { view?: 'full' | 'incremental' },
+  opts?: { view?: 'full' | 'incremental'; reportId?: number },
 ): Promise<CoverageReportDetailVm> {
   const id = Math.trunc(Number(branchCoverageId))
   const body: Record<string, unknown> = { branchCoverageId: id }
   if (opts?.view) {
     body.view = opts.view
+  }
+  if (opts?.reportId != null) {
+    const rid = Math.trunc(Number(opts.reportId))
+    if (Number.isFinite(rid) && rid >= 1) {
+      body.reportId = rid
+    }
   }
   const { data } = await http.post<unknown>('/api/branch-coverages/coverage-report', body)
   return parseCoverageReportResponse(data)

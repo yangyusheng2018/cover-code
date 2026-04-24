@@ -29,7 +29,8 @@ export class CoverageReportDetailService {
   ) {}
 
   /**
-   * 某条分支覆盖率配置下，指定或最新一次上报的详情（汇总 + 文件树 + 行级数据）。
+   * 某条分支覆盖率配置下，指定或「最近更新时间」最新一次上报的详情（汇总 + 文件树 + 行级数据）。
+   * 其它 commit 的上报仍保存在库中，仅默认取最新一条；传 `reportId` 可查看历史。
    */
   async getDetailForBranchCoverage(
     bc: BranchCoverage & { project: Project },

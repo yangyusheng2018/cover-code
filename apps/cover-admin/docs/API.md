@@ -23,7 +23,7 @@
 
 **同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file` 行级数据，不新增记录。入库前会将本次 Istanbul 解析结果与 **库内该提交已有快照** 做行级合并：若某行本次未覆盖但此前已标记为已覆盖，则仍保留为已覆盖（`carried: true`），避免浏览器刷新导致 `__coverage__` 归零后再次上报把历史覆盖「冲掉」。**之后**再按 `meta.parentCommit` / `X-Parent-Commit` 与父提交报告合并（见下），顺序为：先粘合同提交历史，再应用父提交继承与 `resetLines`。
 
-**多版本与代码变更**：库表对 `(branch_coverage_id, git_commit)` 唯一；**不同提交**会各占一条 `coverage_report`，历史版本保留。同一分支上修改代码并产生新 commit 后，应使用 **新的 `X-Git-Commit`** 上报；对比「改前 / 改后」覆盖可在管理端分别打开各 commit 的报告，或（增量任务）结合 Git diff 查看。若需在**同一 commit** 上强制以本次上报为准、丢弃历史粘性行为，可先调用管理端「重置覆盖率」清空该配置下上报，或使用 `meta.fileChanges.*.resetLines` 指定需重算的行。
+**多版本与代码变更**：库表对 `(branch_coverage_id, git_commit)` 唯一；**不同提交**各占一条 `coverage_report`，**历史 commit 不会被删除**；每次上报**仅覆盖**与当前 `X-Git-Commit`（及 NULL 桶）对应的那一条。同一分支上修改代码并产生新 commit 后，应使用 **新的 `X-Git-Commit`** 上报。管理端 **`POST /api/branch-coverages/coverage-reports`** 可列出该分支下全部上报摘要，详情 **`POST /api/branch-coverages/coverage-report`** 可选 **`reportId`** 查看指定一次；不传 `reportId` 时取该分支下 **`updated_at` 最新** 的一条（与「最近活跃」一致）。若需在**同一 commit** 上丢弃粘性与继承，可使用管理端「重置覆盖率」或 `meta.fileChanges.*.resetLines`。
 
 **Source map 与原始源码行号**：服务端在入库前使用 **`istanbul-lib-coverage`** 与 **`istanbul-lib-source-maps`**，对整份 Istanbul payload 做一次 **`transformCoverage`**：若各文件 coverage 上带有 **`inputSourceMap`**（或后续扩展注册外链 map），则将 **statementMap / fnMap / branchMap** 等位置映射回 **原始源文件**，再计算 `line_details` 行号。无可用 source map 时行为与旧版一致。映射过程若抛错，会 **记录告警并回退** 为未映射的原始数据，避免上报失败。
 
@@ -175,7 +175,9 @@
 
 ### 覆盖率详情（弹窗 / 可视化）
 
-**`POST /api/branch-coverages/coverage-report`**（`branch-coverage:detail`）：请求体 **`branchCoverageId`**（必填）；可选 **`reportId`**（指定某次 `coverage_report`，不传则取该分支覆盖率下**最新**一条）；可选 **`includeLineDetails`**（默认 `true`，为 `false` 时不返回每行 `lineDetails`，仅汇总与文件树，减小体积）；可选 **`view`**：`full`（默认）或 **`incremental`**——**仅当**该 `branch_coverage` 的 **`task_scope` 为 `incremental`** 时允许；否则 **400**。为 `incremental` 时调用 GitHub **`{主分支}...{测试分支}`** compare API，仅在 unified diff 涉及的新文件侧行上重算汇总，文件树与 `files` 仅含能对齐路径且有 `patch` 的文件；行对象可带 **`diffMark`**（`+` / 空格表示上下文）。非 GitHub 仓库或 compare 失败时返回 **`diffContext.error`**，且 `files` 可能为空。
+**`POST /api/branch-coverages/coverage-reports`**（`branch-coverage:detail`）：请求体 **`branchCoverageId`**（必填）。返回 **`{ list }`**：`list` 为该分支下全部 `coverage_report` 摘要，按 **`updated_at` 降序**（首条即默认「当前最新」），元素含 **`id`、`gitCommit`、`fileCount`、`coverageMode`、`createdAt`、`updatedAt`**。
+
+**`POST /api/branch-coverages/coverage-report`**（`branch-coverage:detail`）：请求体 **`branchCoverageId`**（必填）；可选 **`reportId`**（指定某次 `coverage_report`，不传则取该分支覆盖率下 **`updated_at` 最新** 一条）；可选 **`includeLineDetails`**（默认 `true`，为 `false` 时不返回每行 `lineDetails`，仅汇总与文件树，减小体积）；可选 **`view`**：`full`（默认）或 **`incremental`**——**仅当**该 `branch_coverage` 的 **`task_scope` 为 `incremental`** 时允许；否则 **400**。为 `incremental` 时调用 GitHub **`{主分支}...{测试分支}`** compare API，仅在 unified diff 涉及的新文件侧行上重算汇总，文件树与 `files` 仅含能对齐路径且有 `patch` 的文件；行对象可带 **`diffMark`**（`+` / 空格表示上下文）。非 GitHub 仓库或 compare 失败时返回 **`diffContext.error`**，且 `files` 可能为空。
 
 - 成功且已有上报：返回 **`summary`**（总**行覆盖率** `coverageRatePercent`、各维度行数）、**`fileTree`**（目录树）、**`files[]`**（每文件 **`stats`**：插桩成功行、覆盖行、未覆盖行、未插桩、插桩失败；**`lineDetails`** 与上报入库一致；**`sourceHint`**：常见托管时可能含 **`rawFileUrl`**（与 `source-file` 同源规则），便于前端直接 `fetch` 源码后按行号着色）。
 - 尚无上报：**`empty: true`**，无 `report`。
@@ -193,7 +195,8 @@
 | ---- | --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST | `/api/branch-coverages/list`            | `branch-coverage:list`   | 请求体：可选 **`taskScope`**：`full`（默认）或 `incremental`，只返回该任务类型；可选 `projectId`、`keyword`、`page`、`pageSize`。返回项含 `id`、`projectId`、`testBranch`、**`taskScope`**、`projectCode`、`projectName`、`createdAt`、`updatedAt`。 |
 | POST | `/api/branch-coverages/detail`          | `branch-coverage:detail` | 请求体：`id`。                                                                                                                                                                                                    |
-| POST | `/api/branch-coverages/coverage-report` | `branch-coverage:detail` | 见上文「覆盖率详情」。                                                                                                                                                                                            |
+| POST | `/api/branch-coverages/coverage-reports` | `branch-coverage:detail` | 列出该分支下全部上报摘要（多 commit）。                                                                                                                                                                           |
+| POST | `/api/branch-coverages/coverage-report`  | `branch-coverage:detail` | 见上文「覆盖率详情」。                                                                                                                                                                                            |
 | POST | `/api/branch-coverages/source-file`     | `branch-coverage:detail` | 见上文「source-file」：按 `path` 从远程 HTTP raw 拉取与上报 commit 一致的源码正文。                                                                                                                               |
 | POST | `/api/branch-coverages/reset-coverage`  | `branch-coverage:update` | **清空覆盖率**：请求体 `branchCoverageId`。删除该配置下全部 `coverage_report`（级联删除 `coverage_file`），**不删除** `branch_coverage` 记录本身。返回 `deletedReportCount`。                                     |
 | POST | `/api/branch-coverages/create`          | `branch-coverage:create` | 请求体：`projectId`、`testBranch`、可选 **`taskScope`**（`full` \| `incremental`，默认 `full`）。**同一 `projectId` + `test_branch` 全局仅允许一条**（不可并存两条）；`task_scope` 仅决定归属全量/增量管理列表。                                                                                                                                    |
@@ -248,7 +251,8 @@
 | POST | `/api/projects/delete`                  | 删除项目                                 |
 | POST | `/api/branch-coverages/list`            | 分支覆盖率分页列表（按 `taskScope` 区分全量/增量）                       |
 | POST | `/api/branch-coverages/detail`          | 分支覆盖率详情                           |
-| POST | `/api/branch-coverages/coverage-report` | 分支覆盖率上报详情（汇总、文件树、行级） |
+| POST | `/api/branch-coverages/coverage-reports` | 分支覆盖率下全部上报摘要（多 commit）   |
+| POST | `/api/branch-coverages/coverage-report`  | 分支覆盖率上报详情（汇总、文件树、行级） |
 | POST | `/api/branch-coverages/source-file`     | 按文件路径从远程拉取源码（HTTP raw）     |
 | POST | `/api/branch-coverages/reset-coverage`  | 清空该分支下的覆盖率上报数据             |
 | POST | `/api/branch-coverages/create`          | 创建分支覆盖率                           |
@@ -304,6 +308,6 @@
 | `api-perm:list` / `api-perm:create` / `api-perm:update` / `api-perm:delete`                                                        | 接口权限定义 CRUD                                                                                                                                    |
 | `ui-perm:list` / `ui-perm:tree` / `ui-perm:create` / `ui-perm:update` / `ui-perm:move` / `ui-perm:delete`                          | 菜单与按钮树 CRUD / 移动                                                                                                                             |
 | `project:list` / `project:detail` / `project:create` / `project:update` / `project:delete`                                         | 项目管理 CRUD                                                                                                                                        |
-| `branch-coverage:list` / `branch-coverage:detail` / `branch-coverage:create` / `branch-coverage:update` / `branch-coverage:delete` | 分支覆盖率 CRUD；`branch-coverage:detail` 含 **`coverage-report`** 与 **`source-file`**；`branch-coverage:update` 含 **清空覆盖率** `reset-coverage` |
+| `branch-coverage:list` / `branch-coverage:detail` / `branch-coverage:create` / `branch-coverage:update` / `branch-coverage:delete` | 分支覆盖率 CRUD；`branch-coverage:detail` 含 **`coverage-reports`**、**`coverage-report`** 与 **`source-file`**；`branch-coverage:update` 含 **清空覆盖率** `reset-coverage` |
 
 新增受保护接口时：在代码上增加 `@RequireApiPermissions('...')`，在库表 `api_permission` 中增加对应 `code`，并通过角色绑定给用户；**并更新本文件相关章节与汇总表。**

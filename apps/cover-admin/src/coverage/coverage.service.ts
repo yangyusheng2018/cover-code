@@ -179,11 +179,19 @@ export class CoverageService {
       let lineDetails = fresh;
       const stickyPrev = stickySameCommitMap.get(path);
       if (stickyPrev?.length) {
-        lineDetails = mergeParentLineDetails(lineDetails, stickyPrev, new Set());
+        lineDetails = mergeParentLineDetails(
+          lineDetails,
+          stickyPrev,
+          new Set(),
+        );
       }
       const parentDetail = parentFilesMap.get(path);
       if (parentCommitNorm && parentDetail?.length) {
-        lineDetails = mergeParentLineDetails(lineDetails, parentDetail, resetLines);
+        lineDetails = mergeParentLineDetails(
+          lineDetails,
+          parentDetail,
+          resetLines,
+        );
       }
 
       const { coveredLines, uncoveredLines } =

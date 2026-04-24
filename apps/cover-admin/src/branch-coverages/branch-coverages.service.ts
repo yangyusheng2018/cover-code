@@ -18,6 +18,7 @@ import {
 } from './dto/branch-coverage.dto';
 import { CoverageReport } from '../coverage/entities/coverage-report.entity';
 import { BranchCoverageCoverageReportDto } from './dto/branch-coverage-coverage-report.dto';
+import { BranchCoverageCoverageReportsListDto } from './dto/branch-coverage-coverage-reports-list.dto';
 import { BranchCoverageSourceFileDto } from './dto/branch-coverage-source-file.dto';
 import { CoverageReportDetailService } from '../coverage/coverage-report-detail.service';
 import { CoverageSourceFetchService } from '../coverage/coverage-source-fetch.service';
@@ -135,6 +136,34 @@ export class BranchCoveragesService {
       message: '已清空该分支下的覆盖率数据',
       branchCoverageId: bc.id,
       deletedReportCount: result.affected ?? 0,
+    };
+  }
+
+  /** 该分支下所有 `coverage_report`（多 commit 均保留；列表按最近更新时间降序） */
+  async listCoverageReports(dto: BranchCoverageCoverageReportsListDto) {
+    const bc = await this.repo.findOne({ where: { id: dto.branchCoverageId } });
+    if (!bc) throw new NotFoundException('分支覆盖率记录不存在');
+    const rows = await this.coverageReportRepo.find({
+      where: { branchCoverageId: bc.id },
+      order: { updatedAt: 'DESC', id: 'DESC' },
+      select: {
+        id: true,
+        gitCommit: true,
+        fileCount: true,
+        coverageMode: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return {
+      list: rows.map((r) => ({
+        id: r.id,
+        gitCommit: r.gitCommit,
+        fileCount: r.fileCount,
+        coverageMode: r.coverageMode ?? 'full',
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      })),
     };
   }
 

@@ -9,6 +9,7 @@ import {
   UpdateBranchCoverageDto,
 } from './dto/branch-coverage.dto';
 import { BranchCoverageCoverageReportDto } from './dto/branch-coverage-coverage-report.dto';
+import { BranchCoverageCoverageReportsListDto } from './dto/branch-coverage-coverage-reports-list.dto';
 import { BranchCoverageSourceFileDto } from './dto/branch-coverage-source-file.dto';
 import { RequireApiPermissions } from '../permission/decorators/require-api-permission.decorator';
 
@@ -26,6 +27,13 @@ export class BranchCoveragesController {
   @RequireApiPermissions('branch-coverage:detail')
   async detail(@Body() dto: BranchCoverageDetailDto) {
     return this.service.findOne(dto);
+  }
+
+  /** 该分支下全部上报记录摘要（多 commit 列表，供详情切换） */
+  @Post('coverage-reports')
+  @RequireApiPermissions('branch-coverage:detail')
+  async coverageReports(@Body() dto: BranchCoverageCoverageReportsListDto) {
+    return this.service.listCoverageReports(dto);
   }
 
   /** 覆盖率上报详情：总览、文件树、每文件行级状态、源码拉取提示（raw URL） */
