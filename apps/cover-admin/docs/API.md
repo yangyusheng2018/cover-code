@@ -23,6 +23,8 @@
 
 **同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file` 行级数据，不新增记录。入库前会将本次 Istanbul 解析结果与 **库内该提交已有快照** 做行级合并：若某行本次未覆盖但此前已标记为已覆盖，则仍保留为已覆盖（`carried: true`），避免浏览器刷新导致 `__coverage__` 归零后再次上报把历史覆盖「冲掉」。**之后**再按 `meta.parentCommit` / `X-Parent-Commit` 与父提交报告合并（见下），顺序为：先粘合同提交历史，再应用父提交继承与 `resetLines`。
 
+**隐式父提交（新 commit 首次上报）**：若请求**未**携带 `X-Parent-Commit` / `meta.parentCommit`，且当前 `git_commit` 在库中**尚不存在**对应 `coverage_report`（即该提交首次入库），服务端会自动选取同分支下 **另一 commit** 中 **`updated_at` 最新** 的一条已有上报作为父快照，对各行做与显式父提交相同的继承合并（`carried`），并把该父 SHA 写入 `coverage_report.parent_commit`。若源码已变，请在 `meta.fileChanges` 中对相关路径声明 **`resetLines`**，这些行将不以父快照为准。已显式声明父提交时，**不会**启用隐式父逻辑。
+
 **多版本与代码变更**：库表对 `(branch_coverage_id, git_commit)` 唯一；**不同提交**各占一条 `coverage_report`，**历史 commit 不会被删除**；每次上报**仅覆盖**与当前 `X-Git-Commit`（及 NULL 桶）对应的那一条。同一分支上修改代码并产生新 commit 后，应使用 **新的 `X-Git-Commit`** 上报。管理端 **`POST /api/branch-coverages/coverage-reports`** 可列出该分支下全部上报摘要，详情 **`POST /api/branch-coverages/coverage-report`** 可选 **`reportId`** 查看指定一次；不传 `reportId` 时取该分支下 **`updated_at` 最新** 的一条（与「最近活跃」一致）。若需在**同一 commit** 上丢弃粘性与继承，可使用管理端「重置覆盖率」或 `meta.fileChanges.*.resetLines`。
 
 **Source map 与原始源码行号**：服务端在入库前使用 **`istanbul-lib-coverage`** 与 **`istanbul-lib-source-maps`**，对整份 Istanbul payload 做一次 **`transformCoverage`**：若各文件 coverage 上带有 **`inputSourceMap`**（或后续扩展注册外链 map），则将 **statementMap / fnMap / branchMap** 等位置映射回 **原始源文件**，再计算 `line_details` 行号。无可用 source map 时行为与旧版一致。映射过程若抛错，会 **记录告警并回退** 为未映射的原始数据，避免上报失败。
@@ -39,7 +41,7 @@
 | `X-Project-Code`     | 项目唯一 `code`（必填）                                                                                                                 |
 | `X-Git-Branch`       | 测试分支，须与「分支覆盖率」中 `test_branch` 一致（必填）                                                                               |
 | `X-Git-Commit`       | 当前提交 SHA，写入 `coverage_report.git_commit`                                                                                         |
-| `X-Parent-Commit`    | 父提交；若库中已有该提交的 `coverage_report`，则对 **未出现在 `meta.fileChanges.*.resetLines` 中的行** 继承父提交「已覆盖」状态（见下） |
+| `X-Parent-Commit`    | 父提交；若库中已有该提交的 `coverage_report`，则对 **未出现在 `meta.fileChanges.*.resetLines` 中的行** 继承父提交「已覆盖」状态（见下）。不传且为**新 commit 首次入库**时，服务端可能自动选用最近一条其它 commit 作为隐式父（见上文） |
 | `X-Coverage-Mode`    | `full`（默认）或 `incremental`；与 `meta.mode` 二选一，**body.meta 优先**                                                               |
 | `X-Diff-Base-Commit` | 增量 diff 基准（如 main 顶端），写入 `coverage_report.diff_base_commit`                                                                 |
 

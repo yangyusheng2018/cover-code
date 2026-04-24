@@ -100,14 +100,23 @@ export class CoverageService {
       diffBaseCommit: diffBaseCommitHeader,
     });
 
+    const rawMetaObj =
+      rawMeta && typeof rawMeta === "object" && !Array.isArray(rawMeta)
+        ? (rawMeta as Record<string, unknown>)
+        : {};
+    const hadExplicitParentRequest =
+      !!parentCommitHeader?.trim() ||
+      (typeof rawMetaObj.parentCommit === "string" &&
+        rawMetaObj.parentCommit.trim() !== "");
+
     const gc = this.normCommit(gitCommit);
-    const parentCommitNorm = this.normCommit(meta.parentCommit ?? undefined);
+    let effectiveParentCommit = this.normCommit(meta.parentCommit ?? undefined);
 
     const parentFilesMap = new Map<string, CoverageLineDetail[]>();
     let parentResolved = false;
-    if (parentCommitNorm) {
+    if (effectiveParentCommit) {
       const parentReport = await this.reportRepo.findOne({
-        where: { branchCoverageId: bc.id, gitCommit: parentCommitNorm },
+        where: { branchCoverageId: bc.id, gitCommit: effectiveParentCommit },
       });
       if (parentReport) {
         parentResolved = true;
@@ -127,6 +136,28 @@ export class CoverageService {
         ? { branchCoverageId: bc.id, gitCommit: IsNull() }
         : { branchCoverageId: bc.id, gitCommit: gc };
     const stickyReport = await this.reportRepo.findOne({ where: stickyWhere });
+
+    /**
+     * 新 commit 首次上报且未显式传父提交时：自动取该分支下「另一 commit」中最近更新的一条作为隐式父，
+     * 用 merge 保留上一版已覆盖行（同 mergeParentLineDetails；源码变更行可通过 meta.fileChanges.resetLines 重算）。
+     */
+    if (
+      !hadExplicitParentRequest &&
+      !stickyReport &&
+      parentFilesMap.size === 0
+    ) {
+      const implicit = await this.loadImplicitParentReportMap(bc.id, gc);
+      if (implicit) {
+        for (const [path, details] of implicit.map) {
+          parentFilesMap.set(path, details);
+        }
+        effectiveParentCommit = implicit.commitNorm;
+        parentResolved = true;
+        this.logger.debug(
+          `coverage ingest: implicit parent commit ${implicit.commitNorm} for branch_coverage=${bc.id} new git_commit=${gc ?? "NULL"}`,
+        );
+      }
+    }
     if (stickyReport) {
       const stickyFiles = await this.fileRepo.find({
         where: { reportId: stickyReport.id },
@@ -186,7 +217,7 @@ export class CoverageService {
         );
       }
       const parentDetail = parentFilesMap.get(path);
-      if (parentCommitNorm && parentDetail?.length) {
+      if (effectiveParentCommit && parentDetail?.length) {
         lineDetails = mergeParentLineDetails(
           lineDetails,
           parentDetail,
@@ -228,7 +259,7 @@ export class CoverageService {
         primary.fileCount = rows.length;
         primary.gitCommit = gc;
         primary.coverageMode = meta.mode ?? "full";
-        primary.parentCommit = parentCommitNorm;
+        primary.parentCommit = effectiveParentCommit;
         primary.diffBaseCommit = diffBaseNorm;
         await em.save(primary);
         report = primary;
@@ -238,7 +269,7 @@ export class CoverageService {
           branchCoverageId: bc.id,
           gitCommit: gc,
           coverageMode: meta.mode ?? "full",
-          parentCommit: parentCommitNorm,
+          parentCommit: effectiveParentCommit,
           diffBaseCommit: diffBaseNorm,
           fileCount: rows.length,
         });
@@ -260,7 +291,7 @@ export class CoverageService {
       return {
         success: true as const,
         replaced,
-        parentResolved: parentCommitNorm ? parentResolved : undefined,
+        parentResolved: effectiveParentCommit ? parentResolved : undefined,
         coverageMode: meta.mode ?? "full",
         message: replaced ? "已覆盖更新" : "已保存",
         reportId: report.id,
@@ -280,5 +311,40 @@ export class CoverageService {
     const t = s?.trim();
     if (!t) return null;
     return t.slice(0, 64);
+  }
+
+  /**
+   * 取同分支下与 `currentGc` 不同的、最近更新的一条 `coverage_report` 的文件行快照，用于隐式父合并。
+   */
+  private async loadImplicitParentReportMap(
+    branchCoverageId: number,
+    currentGc: string | null,
+  ): Promise<{ commitNorm: string; map: Map<string, CoverageLineDetail[]> } | null> {
+    const qb = this.reportRepo
+      .createQueryBuilder("r")
+      .where("r.branchCoverageId = :bcId", { bcId: branchCoverageId })
+      .orderBy("r.updatedAt", "DESC")
+      .addOrderBy("r.id", "DESC");
+    if (currentGc === null) {
+      qb.andWhere("r.gitCommit IS NOT NULL");
+    } else {
+      qb.andWhere("(r.gitCommit IS NULL OR r.gitCommit != :gc)", { gc: currentGc });
+    }
+    const rep = await qb.getOne();
+    const cn = this.normCommit(rep?.gitCommit ?? undefined);
+    if (!rep || !cn) {
+      return null;
+    }
+    const pfs = await this.fileRepo.find({
+      where: { reportId: rep.id },
+    });
+    const map = new Map<string, CoverageLineDetail[]>();
+    for (const f of pfs) {
+      map.set(f.path, f.lineDetails);
+    }
+    if (map.size === 0) {
+      return null;
+    }
+    return { commitNorm: cn, map };
   }
 }
