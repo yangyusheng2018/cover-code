@@ -279,9 +279,12 @@ export class CoverageService {
           gc &&
           effectiveParentCommit !== gc
         ) {
-          const patch =
-            crossCommitPathToPatch.get(repoPath) ||
-            crossCommitPathToPatch.get(path.replace(/\\/g, "/").replace(/^\/+/, ""));
+          const patch = this.pickByRepoPath(
+            crossCommitPathToPatch,
+            project,
+            path,
+            repoPath,
+          );
           if (patch) {
             const m = parseUnifiedPatchToNewToOldLineMap(patch);
             if (m.size > 0) {
@@ -299,7 +302,12 @@ export class CoverageService {
 
       if (incrementalGithubMarks) {
         const rpInc = this.branchDiff.repoPathForCoverageFile(project, path);
-        const marks = incrementalGithubMarks.get(rpInc);
+        const marks = this.pickByRepoPath(
+          incrementalGithubMarks,
+          project,
+          path,
+          rpInc,
+        );
         if (!marks?.size) {
           continue;
         }
@@ -432,5 +440,39 @@ export class CoverageService {
       return null;
     }
     return { commitNorm: cn, map };
+  }
+
+  /**
+   * coverage 路径与 compare filename 可能因 relativeDir/上报键形式不同而不一致；
+   * 这里做多策略匹配，尽量命中同一仓库文件。
+   */
+  private pickByRepoPath<T>(
+    map: Map<string, T>,
+    project: Project,
+    coveragePath: string,
+    joinedRepoPath: string,
+  ): T | undefined {
+    const normalize = (s: string) => s.replace(/\\/g, "/").replace(/^\/+/, "");
+    const rp = normalize(joinedRepoPath);
+    const cp = normalize(coveragePath);
+    const rd = normalize(project.relativeDir ?? "").replace(/\/+$/, "");
+    const cpStrip = rd && cp.startsWith(`${rd}/`) ? cp.slice(rd.length + 1) : cp;
+
+    const direct = map.get(rp) ?? map.get(cp) ?? map.get(cpStrip);
+    if (direct !== undefined) {
+      return direct;
+    }
+
+    const candidates = [rp, cp, cpStrip].filter(Boolean);
+    let bestKey: string | null = null;
+    for (const k of map.keys()) {
+      const nk = normalize(k);
+      if (candidates.some((c) => nk.endsWith(`/${c}`) || c.endsWith(`/${nk}`))) {
+        if (!bestKey || nk.length < bestKey.length) {
+          bestKey = k;
+        }
+      }
+    }
+    return bestKey ? map.get(bestKey) : undefined;
   }
 }
