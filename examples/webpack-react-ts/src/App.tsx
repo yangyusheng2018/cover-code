@@ -15,9 +15,9 @@ export function App(): JSX.Element {
       console.log('score <= 5');  
       console.log('score <= 5');  
       console.log('score <= 5'); 
-      console.log('插入测试行');
-      console.log('插入测试行'); 
-      console.log('score <= 5');  
+      console.log('插入测试行11');
+      console.log('插入测试行11'); 
+      console.log('score <= 511');  
       console.log('score <= 5');  
       console.log('score <= 5');  
       console.log('score <= 5');  
@@ -36,7 +36,7 @@ export function App(): JSX.Element {
     }else{
       console.log('count <= 5');  
       console.log('count <= 5');  
-      console.log('count <= 5');  
+      console.log('count <= 5111');  
       console.log('count <= 5');  
       console.log('count <= 5');  
       console.log('count <= 5');  
