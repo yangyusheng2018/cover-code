@@ -16,10 +16,7 @@ import { joinPathInRepo } from "./coverage-source-hint";
 import { isWrappedPayload, normalizeUploadMeta } from "./coverage-upload-meta";
 import { parseIstanbulFileToLineDetails } from "./istanbul-line-coverage";
 import { remapIstanbulPayloadToOriginalSources } from "./coverage-sourcemap-remap";
-import {
-  parseUnifiedPatchToNewSideDiffPlusLineNumbers,
-  parseUnifiedPatchToNewToOldLineMap,
-} from "./coverage-unified-diff-parse";
+import { parseCrossCommitLineTranslation } from "./coverage-unified-diff-parse";
 
 export interface CoverageIngestParams {
   body: Record<string, unknown>;
@@ -298,15 +295,18 @@ export class CoverageService {
                 repoPath,
               ) ?? null;
             if (patch) {
-              const newToOld = parseUnifiedPatchToNewToOldLineMap(patch);
-              const diffPlusLines =
-                parseUnifiedPatchToNewSideDiffPlusLineNumbers(patch);
+              const maxNewLine = lineDetails.reduce(
+                (m, d) => Math.max(m, d.line),
+                0,
+              );
+              const { newToOld, blockedNewLines } =
+                parseCrossCommitLineTranslation(patch, maxNewLine);
               lineDetails = mergeParentLineDetailsCrossCommit(
                 lineDetails,
                 parentDetail,
                 resetLines,
                 newToOld,
-                diffPlusLines,
+                blockedNewLines,
               );
             } else {
               /** compare 中无该文件条目：两提交间视为未改此文件，新老行号一致 */

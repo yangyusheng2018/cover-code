@@ -75,19 +75,17 @@ export function mergeParentLineDetailsWithLineMapping(
 }
 
 /**
- * 跨提交继承：仅当 **新行号** `f.line` 不是 patch 中 `+` 侧变动行，且父提交在映射到的 **旧行号**
- * 上曾为已覆盖时，才把该覆盖记到 **当前行**（`f.line`）上（`carried: true`）。
+ * 跨提交继承：仅当 **新行号** `f.line` 不在 `blockedNewLines`，且 `newToOld.get(f.line)` 指向的
+ * 父行曾为已覆盖时，才把覆盖记到 **当前新行号**（`carried: true`）。不得用旧行号写入 `line`。
  *
- * - `newToOld`：空格上下文行建立的新行→父行映射（与 {@link parseUnifiedPatchToNewToOldLineMap} 一致）。
- * - `diffPlusNewLines`：patch 中 `+` 行对应的新文件行号，一律不继承。
- * - 有 patch 但某行既非 `+` 又无显式映射：视为 hunk 外未改片段，按 **新老行号相同** 查父行。
+ * `newToOld` / `blockedNewLines` 应由 {@link parseCrossCommitLineTranslation} 等生成（含 hunk 间隙与尾部 1:1 段）。
  */
 export function mergeParentLineDetailsCrossCommit(
   fresh: CoverageLineDetail[],
   parent: CoverageLineDetail[] | null,
   resetLines: Set<number>,
   newToOld: Map<number, number>,
-  diffPlusNewLines: Set<number>,
+  blockedNewLines: Set<number>,
 ): CoverageLineDetail[] {
   if (!parent?.length) {
     return fresh.map((f) => ({ ...f, carried: false }));
@@ -104,11 +102,13 @@ export function mergeParentLineDetailsCrossCommit(
     if (f.covered === true) {
       return { ...f, carried: false };
     }
-    if (diffPlusNewLines.has(f.line)) {
+    if (blockedNewLines.has(f.line)) {
       return { ...f, carried: false };
     }
-    const mappedOld = newToOld.get(f.line);
-    const oldLine = mappedOld !== undefined ? mappedOld : f.line;
+    const oldLine = newToOld.get(f.line);
+    if (oldLine === undefined) {
+      return { ...f, carried: false };
+    }
     const p = parentByLine.get(oldLine);
     if (p?.instrument === "ok" && p.covered === true) {
       return { ...f, covered: true, carried: true };
