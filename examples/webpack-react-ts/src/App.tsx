@@ -5,9 +5,10 @@ export function App(): JSX.Element {
   const [score, setScore] = useState(0);
   const [count, setCount] = useState(0);
   const bump = () => {
-    console.log('测试率')
+    console.log('测试率1')
     if(score > 5){
-      console.log('score > 5');
+      console.log('score > 511');
+      console.log('插入行');
     }else{
       console.log('score <= 5');  
       console.log('score <= 5');  
