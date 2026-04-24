@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import type { CoverageManualMarkKind } from '@/api/branchCoverages'
 import { ElMessage } from 'element-plus'
 import * as api from '@/api/branchCoverages'
 import type {
@@ -32,9 +33,15 @@ const visible = computed({
 })
 
 const loading = ref(false)
+const markingBusy = ref(false)
 const detail = ref<CoverageReportDetailVm | null>(null)
 const treeRef = ref()
+const fileTableRef = ref<{ clearSelection?: () => void } | null>(null)
 const selectedFilePath = ref<string | null>(null)
+/** 文件表多选 */
+const selectedFiles = ref<CoverageReportFileVm[]>([])
+/** 当前文件源码行多选（行号） */
+const selectedLineNums = ref<number[]>([])
 
 /** 该分支下全部上报（多 commit）；默认选「最近更新」第一条，与后端 `coverage-reports` 排序一致 */
 const reportOptions = ref<CoverageReportSummaryRow[]>([])
@@ -161,6 +168,19 @@ const detailFilesView = computed((): CoverageReportFileVm[] => {
   }))
 })
 
+function resolveReportIdFromDetail(d: CoverageReportDetailVm | null): number | undefined {
+  const r = d?.report
+  if (!r || typeof r !== 'object') {
+    return undefined
+  }
+  const id = (r as { id?: unknown }).id
+  if (id == null) {
+    return undefined
+  }
+  const n = Math.trunc(Number(id))
+  return Number.isFinite(n) && n >= 1 ? n : undefined
+}
+
 const summaryTotals = computed(() => {
   const s = detail.value?.summary
   if (!s) {
@@ -199,6 +219,102 @@ const currentFile = computed(() => {
   return detailFilesView.value.find((f) => f.path === p) ?? null
 })
 
+const canManualMark = computed(() => {
+  if (props.branchCoverageId == null || detail.value?.empty) {
+    return false
+  }
+  return resolveReportIdFromDetail(detail.value) != null
+})
+
+function onFileSelectionChange(rows: CoverageReportFileVm[]) {
+  selectedFiles.value = rows ?? []
+}
+
+function toggleLineSelection(line: number, checked: boolean) {
+  if (checked) {
+    if (!selectedLineNums.value.includes(line)) {
+      selectedLineNums.value = [...selectedLineNums.value, line]
+    }
+  } else {
+    selectedLineNums.value = selectedLineNums.value.filter((n) => n !== line)
+  }
+}
+
+async function submitManualMarks(
+  items: Array<{
+    path: string
+    fileMark?: CoverageManualMarkKind | null
+    lineMarks?: Record<string, CoverageManualMarkKind | null>
+  }>,
+) {
+  const bcId = props.branchCoverageId
+  const reportId = resolveReportIdFromDetail(detail.value)
+  if (bcId == null || reportId == null || !items.length) {
+    return
+  }
+  markingBusy.value = true
+  try {
+    const { updated } = await api.applyCoverageManualMarks({
+      branchCoverageId: bcId,
+      reportId,
+      items,
+    })
+    ElMessage.success(`已保存 ${updated} 项人工标记`)
+    selectedFiles.value = []
+    selectedLineNums.value = []
+    fileTableRef.value?.clearSelection?.()
+    await loadDetailCore()
+  } catch (e: unknown) {
+    const msg =
+      (e as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message
+    ElMessage.error(Array.isArray(msg) ? msg.join('；') : msg || '保存标记失败')
+  } finally {
+    markingBusy.value = false
+  }
+}
+
+async function markSelectedFilesRedundant() {
+  if (!selectedFiles.value.length) {
+    return
+  }
+  await submitManualMarks(
+    selectedFiles.value.map((f) => ({ path: f.path, fileMark: 'redundant_covered' as const })),
+  )
+}
+
+async function markSelectedFilesInstrumentExcluded() {
+  if (!selectedFiles.value.length) {
+    return
+  }
+  await submitManualMarks(
+    selectedFiles.value.map((f) => ({ path: f.path, fileMark: 'instrument_excluded' as const })),
+  )
+}
+
+async function markSelectedLinesRedundant() {
+  const path = currentFile.value?.path
+  if (!path || !selectedLineNums.value.length) {
+    return
+  }
+  const lineMarks: Record<string, CoverageManualMarkKind> = {}
+  for (const n of selectedLineNums.value) {
+    lineMarks[String(n)] = 'redundant_covered'
+  }
+  await submitManualMarks([{ path, lineMarks }])
+}
+
+async function markSelectedLinesInstrumentExcluded() {
+  const path = currentFile.value?.path
+  if (!path || !selectedLineNums.value.length) {
+    return
+  }
+  const lineMarks: Record<string, CoverageManualMarkKind> = {}
+  for (const n of selectedLineNums.value) {
+    lineMarks[String(n)] = 'instrument_excluded'
+  }
+  await submitManualMarks([{ path, lineMarks }])
+}
+
 /** 服务端 `source-file` 拉取结果缓存 */
 const sourceLinesCache = ref<Record<string, string[]>>({})
 /** 与缓存行对应的 Git 元信息（按 path） */
@@ -207,19 +323,6 @@ const sourceMetaCache = ref<
 >({})
 const sourceLoading = ref(false)
 const sourceError = ref('')
-
-function resolveReportIdFromDetail(d: CoverageReportDetailVm | null): number | undefined {
-  const r = d?.report
-  if (!r || typeof r !== 'object') {
-    return undefined
-  }
-  const id = (r as { id?: unknown }).id
-  if (id == null) {
-    return undefined
-  }
-  const n = Math.trunc(Number(id))
-  return Number.isFinite(n) && n >= 1 ? n : undefined
-}
 
 const currentSourceMeta = computed(() => {
   const p = selectedFilePath.value
@@ -284,6 +387,7 @@ const displayLines = computed(() => {
       state: UiLineState
       diffMark?: '+' | ' '
       inScope?: boolean
+      manualMark?: CoverageLineDetailDto['manualMark']
     }[]
   }
   const src = sourceLinesCache.value[path] ?? []
@@ -297,6 +401,7 @@ const displayLines = computed(() => {
         state: mapBackendLineToUiState(d, true),
         diffMark: d.diffMark,
         inScope: d.inScope,
+        manualMark: d.manualMark,
       }))
   }
   const map = new Map(f.lineDetails.map((d) => [d.line, d]))
@@ -315,12 +420,18 @@ const displayLines = computed(() => {
     state: UiLineState
     diffMark?: '+' | ' '
     inScope?: boolean
+    manualMark?: CoverageLineDetailDto['manualMark']
   }[] = []
   for (let i = 1; i <= maxLine; i++) {
     const d = map.get(i)
     const text = src[i - 1] ?? (d ? '\u2003' : '')
     const state: UiLineState = d ? mapBackendLineToUiState(d) : 'neutral'
-    out.push({ lineNumber: i, text, state })
+    out.push({
+      lineNumber: i,
+      text,
+      state,
+      manualMark: d?.manualMark,
+    })
   }
   return out
 })
@@ -406,6 +517,10 @@ function onTreeNodeClick(data: CoverageTreeItem) {
   selectedFilePath.value = data.filePath
 }
 
+watch(selectedFilePath, () => {
+  selectedLineNums.value = []
+})
+
 watch(
   () => [props.modelValue, props.branchCoverageId, props.incrementalView] as const,
   ([open, id]) => {
@@ -417,6 +532,9 @@ watch(
       reportOptions.value = []
       selectedReportId.value = undefined
       selectedFilePath.value = null
+      selectedFiles.value = []
+      selectedLineNums.value = []
+      fileTableRef.value?.clearSelection?.()
       sourceLinesCache.value = {}
       sourceMetaCache.value = {}
       sourceError.value = ''
@@ -447,6 +565,10 @@ function lineClass(state: UiLineState) {
     return 'cov-line cov-line--diff-context'
   }
   return 'cov-line cov-line--neutral'
+}
+
+function manualMarkLabel(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
+  return m === 'redundant_covered' ? '冗余·已覆盖' : '插桩排除'
 }
 </script>
 
@@ -550,16 +672,46 @@ function lineClass(state: UiLineState) {
             <span class="legend-i legend-i--diffadd">diff + 变更/新增（计入增量）</span>
             <span class="legend-i legend-i--diffctx">与主分支一致（不计入增量）</span>
           </template>
+          <span class="legend-i legend-i--manual-red">人工·冗余已覆盖</span>
+          <span class="legend-i legend-i--manual-exc">人工·插桩排除</span>
+        </div>
+
+        <div v-if="canManualMark" class="manual-toolbar manual-toolbar--files">
+          <span class="manual-toolbar__label">文件（多选表格）</span>
+          <el-button
+            type="primary"
+            plain
+            size="small"
+            :disabled="!selectedFiles.length || markingBusy"
+            :loading="markingBusy"
+            @click="markSelectedFilesRedundant"
+          >
+            冗余文件 → 已覆盖
+          </el-button>
+          <el-button
+            type="warning"
+            plain
+            size="small"
+            :disabled="!selectedFiles.length || markingBusy"
+            :loading="markingBusy"
+            @click="markSelectedFilesInstrumentExcluded"
+          >
+            插桩错误文件 → 移出统计
+          </el-button>
         </div>
 
         <el-table
+          ref="fileTableRef"
+          row-key="path"
           :data="detailFilesView"
           border
           size="small"
           class="detail-file-table"
           max-height="220"
           style="width: 100%"
+          @selection-change="onFileSelectionChange"
         >
+          <el-table-column type="selection" width="42" />
           <el-table-column prop="path" label="文件" min-width="220" show-overflow-tooltip />
           <el-table-column label="插桩成功" width="92" align="right">
             <template #default="{ row }">{{ row.stats.instrumentOk }}</template>
@@ -622,6 +774,29 @@ function lineClass(state: UiLineState) {
               :closable="false"
               class="mb"
             />
+            <div v-if="canManualMark && currentFile" class="manual-toolbar manual-toolbar--lines">
+              <span class="manual-toolbar__label">当前文件行（勾选多行）</span>
+              <el-button
+                type="primary"
+                plain
+                size="small"
+                :disabled="!selectedLineNums.length || markingBusy"
+                :loading="markingBusy"
+                @click="markSelectedLinesRedundant"
+              >
+                冗余行 → 已覆盖
+              </el-button>
+              <el-button
+                type="warning"
+                plain
+                size="small"
+                :disabled="!selectedLineNums.length || markingBusy"
+                :loading="markingBusy"
+                @click="markSelectedLinesInstrumentExcluded"
+              >
+                插桩错误行 → 移出统计
+              </el-button>
+            </div>
             <div v-loading="sourceLoading" class="source-panel-inner">
               <el-scrollbar v-if="currentFile && displayLines.length" max-height="min(52vh, 560px)">
                 <div class="source-code">
@@ -630,10 +805,26 @@ function lineClass(state: UiLineState) {
                     :key="`${currentFile.path}:${ln.lineNumber}`"
                     :class="lineClass(ln.state)"
                   >
+                    <el-checkbox
+                      v-if="canManualMark"
+                      class="source-code__chk"
+                      :model-value="selectedLineNums.includes(ln.lineNumber)"
+                      @change="
+                        (v: string | number | boolean) =>
+                          toggleLineSelection(ln.lineNumber, v === true)
+                      "
+                    />
+                    <span v-else class="source-code__chk-spacer" />
                     <span v-if="incrementalView" class="source-code__diff" aria-hidden="true">{{
                       ln.diffMark === '+' ? '+' : ' '
                     }}</span>
                     <span class="source-code__no">{{ ln.lineNumber }}</span>
+                    <span
+                      v-if="ln.manualMark"
+                      class="source-code__manual"
+                      :title="manualMarkLabel(ln.manualMark)"
+                      >{{ manualMarkLabel(ln.manualMark) }}</span
+                    >
                     <span class="source-code__text">{{ ln.text }}</span>
                   </div>
                 </div>
@@ -773,6 +964,34 @@ function lineClass(state: UiLineState) {
   color: #1565c0;
 }
 
+.legend-i--manual-red {
+  background: #e8eaf6;
+  color: #3949ab;
+}
+
+.legend-i--manual-exc {
+  background: #fff8e1;
+  color: #f57f17;
+}
+
+.manual-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+}
+
+.manual-toolbar__label {
+  font-size: 12px;
+  color: #606266;
+  margin-right: 4px;
+}
+
 .diff-range-hint {
   margin: 0 0 10px;
   font-size: 13px;
@@ -838,9 +1057,30 @@ function lineClass(state: UiLineState) {
 
 .cov-line {
   display: flex;
+  align-items: flex-start;
   gap: 8px;
   padding: 0 4px;
   border-left: 3px solid transparent;
+}
+
+.source-code__chk {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.source-code__chk-spacer {
+  flex: 0 0 22px;
+}
+
+.source-code__manual {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: #ede7f6;
+  color: #5e35b1;
+  white-space: nowrap;
+  margin-top: 1px;
 }
 
 .source-code__diff {

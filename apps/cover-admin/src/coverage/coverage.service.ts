@@ -17,6 +17,10 @@ import { isWrappedPayload, normalizeUploadMeta } from "./coverage-upload-meta";
 import { parseIstanbulFileToLineDetails } from "./istanbul-line-coverage";
 import { remapIstanbulPayloadToOriginalSources } from "./coverage-sourcemap-remap";
 import { parseCrossCommitLineTranslation } from "./coverage-unified-diff-parse";
+import {
+  applyManualMarksToLineDetails,
+  type CoverageFileManualMarks,
+} from "./coverage-manual-marks";
 
 export interface CoverageIngestParams {
   body: Record<string, unknown>;
@@ -227,8 +231,6 @@ export class CoverageService {
     type Row = {
       path: string;
       lineDetails: CoverageLineDetail[];
-      coveredLines: number[];
-      uncoveredLines: number[];
     };
     const rows: Row[] = [];
 
@@ -343,9 +345,7 @@ export class CoverageService {
         }
       }
 
-      const { coveredLines, uncoveredLines } =
-        lineDetailsToHitArrays(lineDetails);
-      rows.push({ path, lineDetails, coveredLines, uncoveredLines });
+      rows.push({ path, lineDetails });
     }
 
     if (rows.length === 0) {
@@ -365,12 +365,20 @@ export class CoverageService {
         order: { id: "ASC" },
       });
 
+      const prevManualByPath = new Map<string, CoverageFileManualMarks | null>();
+
       let report: CoverageReport;
       let replaced: boolean;
 
       if (existingList.length > 0) {
         replaced = true;
         const [primary, ...dupes] = existingList;
+        const prevFiles = await em.find(CoverageFile, {
+          where: { reportId: primary.id },
+        });
+        for (const pf of prevFiles) {
+          prevManualByPath.set(pf.path, pf.manualMarks ?? null);
+        }
         for (const d of dupes) {
           await em.delete(CoverageFile, { reportId: d.id });
           await em.remove(d);
@@ -397,13 +405,25 @@ export class CoverageService {
       }
 
       for (const r of rows) {
+        const lineDetailsCore = JSON.parse(
+          JSON.stringify(r.lineDetails),
+        ) as CoverageLineDetail[];
+        const marks = prevManualByPath.get(r.path) ?? null;
+        const merged = applyManualMarksToLineDetails(
+          lineDetailsCore,
+          marks ?? undefined,
+        );
+        const { coveredLines, uncoveredLines } =
+          lineDetailsToHitArrays(merged);
         await em.save(
           em.create(CoverageFile, {
             reportId: report.id,
             path: r.path,
-            lineDetails: r.lineDetails,
-            coveredLines: r.coveredLines,
-            uncoveredLines: r.uncoveredLines,
+            lineDetailsCore,
+            lineDetails: merged,
+            coveredLines,
+            uncoveredLines,
+            manualMarks: marks,
           }),
         );
       }
@@ -417,12 +437,24 @@ export class CoverageService {
         reportId: report.id,
         branchCoverageId: bc.id,
         fileCount: rows.length,
-        files: rows.map((r) => ({
-          path: r.path,
-          coveredLineCount: r.coveredLines.length,
-          uncoveredLineCount: r.uncoveredLines.length,
-          lineCount: r.lineDetails.length,
-        })),
+        files: rows.map((r) => {
+          const lineDetailsCore = JSON.parse(
+            JSON.stringify(r.lineDetails),
+          ) as CoverageLineDetail[];
+          const marks = prevManualByPath.get(r.path) ?? null;
+          const merged = applyManualMarksToLineDetails(
+            lineDetailsCore,
+            marks ?? undefined,
+          );
+          const { coveredLines, uncoveredLines } =
+            lineDetailsToHitArrays(merged);
+          return {
+            path: r.path,
+            coveredLineCount: coveredLines.length,
+            uncoveredLineCount: uncoveredLines.length,
+            lineCount: merged.length,
+          };
+        }),
       };
     });
   }

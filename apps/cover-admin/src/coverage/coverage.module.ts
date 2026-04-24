@@ -7,6 +7,7 @@ import { CoverageService } from './coverage.service';
 import { CoverageReportDetailService } from './coverage-report-detail.service';
 import { CoverageSourceFetchService } from './coverage-source-fetch.service';
 import { CoverageBranchDiffService } from './coverage-branch-diff.service';
+import { CoverageManualMarksService } from './coverage-manual-marks.service';
 import { CoverageFile } from './entities/coverage-file.entity';
 import { CoverageReport } from './entities/coverage-report.entity';
 
@@ -25,7 +26,13 @@ import { CoverageReport } from './entities/coverage-report.entity';
     CoverageReportDetailService,
     CoverageSourceFetchService,
     CoverageBranchDiffService,
+    CoverageManualMarksService,
   ],
-  exports: [CoverageReportDetailService, CoverageSourceFetchService, CoverageBranchDiffService],
+  exports: [
+    CoverageReportDetailService,
+    CoverageSourceFetchService,
+    CoverageBranchDiffService,
+    CoverageManualMarksService,
+  ],
 })
 export class CoverageModule {}

@@ -501,6 +501,23 @@ export async function fetchBranchCoverageReportSummaries(
 }
 
 /** `POST /api/branch-coverages/coverage-report` Body: `{ branchCoverageId }`（整数 ≥1，勿传 `id`） */
+export type CoverageManualMarkKind = 'redundant_covered' | 'instrument_excluded'
+
+export async function applyCoverageManualMarks(body: {
+  branchCoverageId: number
+  reportId: number
+  items: Array<{
+    path: string
+    fileMark?: CoverageManualMarkKind | null
+    lineMarks?: Record<string, CoverageManualMarkKind | null>
+  }>
+}): Promise<{ updated: number }> {
+  const { data } = await http.post<unknown>('/api/branch-coverages/coverage-manual-marks', body)
+  const o = unwrapApiEnvelope(data) as Record<string, unknown>
+  const updated = Number(o.updated ?? o.Updated ?? 0)
+  return { updated: Number.isFinite(updated) ? updated : 0 }
+}
+
 export async function fetchBranchCoverageDetail(
   branchCoverageId: number,
   opts?: { view?: 'full' | 'incremental'; reportId?: number },

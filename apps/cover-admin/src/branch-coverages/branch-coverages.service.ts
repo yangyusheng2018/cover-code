@@ -21,7 +21,9 @@ import { BranchCoverageCoverageReportDto } from './dto/branch-coverage-coverage-
 import { BranchCoverageCoverageReportsListDto } from './dto/branch-coverage-coverage-reports-list.dto';
 import { BranchCoverageSourceFileDto } from './dto/branch-coverage-source-file.dto';
 import { CoverageReportDetailService } from '../coverage/coverage-report-detail.service';
+import { CoverageManualMarksService } from '../coverage/coverage-manual-marks.service';
 import { CoverageSourceFetchService } from '../coverage/coverage-source-fetch.service';
+import { BranchCoverageManualMarksDto } from './dto/branch-coverage-manual-marks.dto';
 
 export interface BranchCoverageRow {
   id: number;
@@ -44,6 +46,7 @@ export class BranchCoveragesService {
     @InjectRepository(CoverageReport)
     private readonly coverageReportRepo: Repository<CoverageReport>,
     private readonly coverageReportDetail: CoverageReportDetailService,
+    private readonly manualMarksSvc: CoverageManualMarksService,
     private readonly coverageSourceFetch: CoverageSourceFetchService,
   ) {}
 
@@ -165,6 +168,19 @@ export class BranchCoveragesService {
         updatedAt: r.updatedAt,
       })),
     };
+  }
+
+  /** 详情弹窗：人工标记（冗余已覆盖 / 插桩排除），不参与父提交合并，按 core+marks 重算行与统计 */
+  async applyCoverageManualMarks(dto: BranchCoverageManualMarksDto) {
+    return this.manualMarksSvc.applyBatch(
+      dto.branchCoverageId,
+      dto.reportId,
+      dto.items.map((it) => ({
+        path: it.path,
+        fileMark: it.fileMark,
+        lineMarks: it.lineMarks,
+      })),
+    );
   }
 
   /** 覆盖率详情：汇总 + 文件树 + 行级（供详情弹窗） */

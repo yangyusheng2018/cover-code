@@ -11,6 +11,7 @@ import {
 import { BranchCoverageCoverageReportDto } from './dto/branch-coverage-coverage-report.dto';
 import { BranchCoverageCoverageReportsListDto } from './dto/branch-coverage-coverage-reports-list.dto';
 import { BranchCoverageSourceFileDto } from './dto/branch-coverage-source-file.dto';
+import { BranchCoverageManualMarksDto } from './dto/branch-coverage-manual-marks.dto';
 import { RequireApiPermissions } from '../permission/decorators/require-api-permission.decorator';
 
 @Controller('branch-coverages')
@@ -41,6 +42,12 @@ export class BranchCoveragesController {
   @RequireApiPermissions('branch-coverage:detail')
   async coverageReport(@Body() dto: BranchCoverageCoverageReportDto) {
     return this.service.coverageReport(dto);
+  }
+
+  @Post('coverage-manual-marks')
+  @RequireApiPermissions('branch-coverage:update')
+  async coverageManualMarks(@Body() dto: BranchCoverageManualMarksDto) {
+    return this.service.applyCoverageManualMarks(dto);
   }
 
   /** 从远程仓库（HTTP raw）拉取与本次上报 commit 一致的源码正文 */
