@@ -3,7 +3,7 @@ import { describeScore } from "./utils";
 
 export function App(): JSX.Element {
   const [score, setScore] = useState(0);
-
+  const [count, setCount] = useState(0);
   const bump = () => {
     console.log('测试率')
     if(score > 5){
@@ -24,6 +24,26 @@ export function App(): JSX.Element {
     }
     setScore((s) => s + 1);
   };
+  const addCount = () => {
+    console.log('add')
+    if(count > 5){
+      console.log('count > 5');
+      console.log('count > 5');
+      console.log('count > 5');
+      console.log('count > 5');
+      console.log('count > 5');
+      console.log('count > 5');
+    }else{
+      console.log('count <= 5');  
+      console.log('count <= 5');  
+      console.log('count <= 5');  
+      console.log('count <= 5');  
+      console.log('count <= 5');  
+      console.log('count <= 5');  
+      console.log('count <= 5');  
+    }
+    setCount((c) => c + 1);
+  };
   const nouse=()=>{
     console.log('nouse')
   }
@@ -38,6 +58,7 @@ export function App(): JSX.Element {
       <button type="button" onClick={bump}>
         +1
       </button>
+      <button type="button" onClick={addCount}>count +1 {count}</button>
       {score > 5 ? (
         <p data-testid="high">
           <div>已大于 5</div>
