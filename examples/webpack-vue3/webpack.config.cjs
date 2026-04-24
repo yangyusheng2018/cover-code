@@ -1,7 +1,7 @@
 const path = require("node:path");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { VueLoaderPlugin } = require("vue-loader");
-const { IstanbulLiveWebpackPlugin } = require("@istanbul-live/webpack-plugin");
+const { IstanbulLiveWebpackPlugin } = require("istanbul-live-webpack-plugin");
 
 /** @type {import('webpack').Configuration} */
 module.exports = {

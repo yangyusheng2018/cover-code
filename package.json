@@ -3,8 +3,11 @@
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "scripts": {
-    "build:sdk": "pnpm -r --filter \"@istanbul-live/*\" run build",
-    "postinstall": "pnpm run build",
+    "build:sdk": "pnpm -r --filter \"istanbul-live-*\" run build",
+    "publish:sdk": "pnpm run build:sdk && pnpm -r --filter \"istanbul-live-*\" publish --no-git-checks",
+    "publish:sdk:webpack-plugin": "pnpm run build:sdk && pnpm --filter istanbul-live-webpack-plugin publish --no-git-checks",
+    "publish:sdk:vite-plugin": "pnpm run build:sdk && pnpm --filter istanbul-live-vite-plugin publish --no-git-checks",
+    "postinstall": "pnpm run build:sdk",
     "dev:vite": "pnpm --filter vite-vue3-demo dev",
     "build:vite": "pnpm --filter vite-vue3-demo build",
     "dev:webpack": "pnpm --filter webpack-vue3-demo dev",

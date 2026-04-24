@@ -1,8 +1,11 @@
 {
-  "name": "@istanbul-live/instrument",
+  "name": "istanbul-live-babel",
   "version": "0.1.0",
   "description": "Reusable Babel + babel-plugin-istanbul helpers for custom build pipelines",
   "type": "module",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -24,6 +27,8 @@
     "typescript": "^5.8.3"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "pnpm run build",
+    "publish:npm": "pnpm publish --no-git-checks"
   }
 }

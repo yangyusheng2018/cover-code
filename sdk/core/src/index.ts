@@ -95,7 +95,7 @@ export function buildCoverageUploadInlineScript(
   const projectCode = options.projectCode?.trim() ?? "";
   if (!projectCode) {
     throw new Error(
-      "@istanbul-live/core: projectCode is required for coverage upload"
+      "istanbul-live-core: projectCode is required for coverage upload"
     );
   }
   const endpoint = options.endpoint;

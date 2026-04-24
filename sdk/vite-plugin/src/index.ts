@@ -3,8 +3,8 @@ import {
   buildCoverageUploadInlineScript,
   resolveCoverageReportPathRoot,
   resolveGitUploadMeta
-} from "@istanbul-live/core";
-import type { CoverageUploadClientOptions } from "@istanbul-live/core";
+} from "istanbul-live-core";
+import type { CoverageUploadClientOptions } from "istanbul-live-core";
 import type { Plugin } from "vite";
 import * as VitePluginIstanbul from "vite-plugin-istanbul";
 import type { IstanbulPluginOptions } from "vite-plugin-istanbul";

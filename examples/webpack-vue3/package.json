@@ -7,7 +7,7 @@
     "build": "webpack --config webpack.config.cjs"
   },
   "dependencies": {
-    "@istanbul-live/webpack-plugin": "workspace:*",
+    "istanbul-live-webpack-plugin": "workspace:*",
     "vue": "^3.5.13"
   },
   "devDependencies": {

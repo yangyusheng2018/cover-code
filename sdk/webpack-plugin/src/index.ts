@@ -5,8 +5,8 @@ import {
   buildCoverageUploadInlineScript,
   resolveCoverageReportPathRoot,
   resolveGitUploadMeta,
-} from "@istanbul-live/core";
-import type { CoverageUploadClientOptions } from "@istanbul-live/core";
+} from "istanbul-live-core";
+import type { CoverageUploadClientOptions } from "istanbul-live-core";
 
 export type IstanbulLiveWebpackPluginUploadOptions = Omit<
   CoverageUploadClientOptions,

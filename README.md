@@ -4,7 +4,7 @@
 
 本仓库将以下内容放在同一 **pnpm workspace** 中管理：
 
-- **`sdk/`**：原 `E:\work\test-cover\packages` 下的 Istanbul 实时覆盖率相关包（`@istanbul-live/*`）
+- **`sdk/`**：原 `E:\work\test-cover\packages` 下的 Istanbul 实时覆盖率相关包（`istanbul-live-*` npm 包名）
 - **`examples/`**：原 `E:\work\test-cover\examples` 下的演示与 `coverage-server`
 - **`apps/cover-admin-front/`**：原 `E:\work\cover-admin-front` 管理端（包名 `cover-admin-bi`）
 - **`apps/cover-admin/`**：原 `E:\server\cover-admin` NestJS 后端（包名 `cover-admin-server`）

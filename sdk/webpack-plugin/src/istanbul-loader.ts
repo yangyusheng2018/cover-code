@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import path from "node:path";
 import { createInstrumenter } from "istanbul-lib-instrument";
 import type { LoaderContext } from "webpack";
-import { resolveCoverageReportPathRoot } from "@istanbul-live/core";
+import { resolveCoverageReportPathRoot } from "istanbul-live-core";
 
 type WpiUtils = {
   createTestExclude: (opts: Record<string, unknown>) => {

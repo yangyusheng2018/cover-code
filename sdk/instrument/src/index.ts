@@ -1,5 +1,5 @@
 /**
- * @istanbul-live/instrument
+ * istanbul-live-babel
  *
  * 供自定义 Vite/Webpack 链或其它工具复用：对单段源码做 babel-plugin-istanbul 插桩、过滤无效 inputSourceMap。
  */
