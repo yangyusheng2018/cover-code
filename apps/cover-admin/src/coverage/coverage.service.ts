@@ -7,7 +7,7 @@ import { CoverageFile } from "./entities/coverage-file.entity";
 import { CoverageReport } from "./entities/coverage-report.entity";
 import {
   mergeParentLineDetails,
-  mergeParentLineDetailsWithLineMapping,
+  mergeParentLineDetailsCrossCommit,
   lineDetailsToHitArrays,
 } from "./coverage-line-merge";
 import type { CoverageLineDetail } from "./coverage-line-types";
@@ -16,7 +16,10 @@ import { joinPathInRepo } from "./coverage-source-hint";
 import { isWrappedPayload, normalizeUploadMeta } from "./coverage-upload-meta";
 import { parseIstanbulFileToLineDetails } from "./istanbul-line-coverage";
 import { remapIstanbulPayloadToOriginalSources } from "./coverage-sourcemap-remap";
-import { parseUnifiedPatchToNewToOldLineMap } from "./coverage-unified-diff-parse";
+import {
+  parseUnifiedPatchToNewSideDiffPlusLineNumbers,
+  parseUnifiedPatchToNewToOldLineMap,
+} from "./coverage-unified-diff-parse";
 
 export interface CoverageIngestParams {
   body: Record<string, unknown>;
@@ -176,7 +179,9 @@ export class CoverageService {
      * 父提交 ≠ 当前提交时：通过 GitHub `compare/{parent}...{head}`（两 commit SHA）拉各文件 patch，
      * 供 unified diff 解析新行→旧行映射（与是否在服务端克隆仓库无关）。
      */
-    let crossCommitPathToPatch: Map<string, string> | null = null;
+    /** compare 成功则为 true，此时 `crossCommitPathToPatch` 为本次拉取结果（可为空 Map）；失败则为 false，跨提交不做父合并 */
+    let crossCommitCompareOk = false;
+    let crossCommitPathToPatch = new Map<string, string>();
     if (
       effectiveParentCommit &&
       gc &&
@@ -190,9 +195,10 @@ export class CoverageService {
       );
       if (cmp.error) {
         this.logger.warn(
-          `coverage ingest: parent↔head commit diff unavailable (${cmp.error}); cross-commit parent merge skipped without line mapping`,
+          `coverage ingest: parent↔head commit diff unavailable (${cmp.error}); cross-commit parent merge skipped`,
         );
-      } else if (cmp.pathToPatch.size > 0) {
+      } else {
+        crossCommitCompareOk = true;
         crossCommitPathToPatch = cmp.pathToPatch;
       }
     }
@@ -280,32 +286,37 @@ export class CoverageService {
           gc &&
           effectiveParentCommit !== gc
         );
-        let newToOld: Map<number, number> | null = null;
-        if (isCrossCommit && crossCommitPathToPatch) {
-          const patch =
-            this.pickByRepoPath(
-              crossCommitPathToPatch,
-              project,
-              path,
-              repoPath,
-            ) ?? null;
-          if (patch) {
-            const m = parseUnifiedPatchToNewToOldLineMap(patch);
-            if (m.size > 0) {
-              newToOld = m;
+        if (isCrossCommit) {
+          if (!crossCommitCompareOk) {
+            /* compare 不可用：不做跨提交父合并 */
+          } else {
+            const patch =
+              this.pickByRepoPath(
+                crossCommitPathToPatch,
+                project,
+                path,
+                repoPath,
+              ) ?? null;
+            if (patch) {
+              const newToOld = parseUnifiedPatchToNewToOldLineMap(patch);
+              const diffPlusLines =
+                parseUnifiedPatchToNewSideDiffPlusLineNumbers(patch);
+              lineDetails = mergeParentLineDetailsCrossCommit(
+                lineDetails,
+                parentDetail,
+                resetLines,
+                newToOld,
+                diffPlusLines,
+              );
+            } else {
+              /** compare 中无该文件条目：两提交间视为未改此文件，新老行号一致 */
+              lineDetails = mergeParentLineDetails(
+                lineDetails,
+                parentDetail,
+                resetLines,
+              );
             }
           }
-        }
-        if (isCrossCommit) {
-          if (newToOld?.size) {
-            lineDetails = mergeParentLineDetailsWithLineMapping(
-              lineDetails,
-              parentDetail,
-              resetLines,
-              newToOld,
-            );
-          }
-          // 跨提交且无 diff 行映射：不合并父快照，避免误用数据库行号
         } else {
           lineDetails = mergeParentLineDetails(
             lineDetails,

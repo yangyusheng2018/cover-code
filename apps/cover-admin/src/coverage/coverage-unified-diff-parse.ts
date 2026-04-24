@@ -138,3 +138,20 @@ export function parseUnifiedPatchToNewToOldLineMap(patch: string): Map<number, n
   }
   return map;
 }
+
+/**
+ * 新提交侧 patch 中行前缀为 `+` 的行号（新增或替换后的新行），即「变动行」。
+ * 跨提交继承覆盖率时这些行 **不** 查父快照；仅空格上下文行可映射到父提交行号。
+ */
+export function parseUnifiedPatchToNewSideDiffPlusLineNumbers(
+  patch: string,
+): Set<number> {
+  const marks = parseUnifiedPatchToNewSideLineMarks(patch);
+  const plus = new Set<number>();
+  for (const [newLine, mark] of marks) {
+    if (mark === "+") {
+      plus.add(newLine);
+    }
+  }
+  return plus;
+}

@@ -27,7 +27,7 @@
 
 **隐式父提交（新 commit 首次上报）**：若请求**未**携带 `X-Parent-Commit` / `meta.parentCommit`，且当前 `git_commit` 在库中**尚不存在**对应 `coverage_report`（即该提交首次入库），服务端会自动选取同分支下 **另一 commit** 中 **`updated_at` 最新** 的一条已有上报作为父快照，对各行做与显式父提交相同的继承合并（`carried`），并把该父 SHA 写入 `coverage_report.parent_commit`。若源码已变，请在 `meta.fileChanges` 中对相关路径声明 **`resetLines`**，这些行将不以父快照为准。已显式声明父提交时，**不会**启用隐式父逻辑。
 
-**跨提交行对齐（远端仓库两提交）**：当父提交 SHA 与当前 `X-Git-Commit` 不同时，行级继承依赖 **远端 Git 仓库上这两个 commit 之间的 diff**：若项目在管理端配置为 **GitHub** 地址，服务端请求 **`repos/{owner}/{repo}/compare/{parent}...{current}`**（路径参数为 **两个 commit SHA**，由 GitHub 按仓库历史计算提交间差异），读取响应里各文件的 unified `patch` 建立「新行号 → 父快照行号」映射。**不要求**在 cover-admin 所在机器上再克隆一份本地仓库。非 GitHub、compare 失败、某文件无 patch 或解析不到映射时，**不**做跨提交的父行级合并（不按数据库行号猜对齐）；同提交粘性合并仍有效。仍可用 **`meta.fileChanges.*.resetLines`** 指定不重算的行。
+**跨提交行对齐（远端仓库两提交）**：当父提交 SHA 与当前 `X-Git-Commit` 不同时，服务端请求 GitHub **`repos/{owner}/{repo}/compare/{parent}...{current}`**（两 **commit SHA**）取各文件 unified `patch`。继承规则：**仅**新提交里 **patch 中非 `+` 侧变动行**（空格上下文及 hunk 外未列出的未改行，按新行号查父时映射到父行号或同号）且父快照该行曾为已覆盖时，才把「已覆盖」记到 **当前行号**（`line_details[].line` 始终为新提交行号，不写入父行号）。**`+` 行（新增/替换后的新行）一律不继承父覆盖**。compare 中**无该文件** patch 时视为该文件在两提交间未改，按同号对齐继承。compare **请求失败**时不做跨提交父合并（不按行号猜）。同提交粘性合并仍有效。仍可用 **`meta.fileChanges.*.resetLines`** 指定不重算的行。
 
 **多版本与代码变更**：库表对 `(branch_coverage_id, git_commit)` 唯一；**不同提交**各占一条 `coverage_report`，**历史 commit 不会被删除**；每次上报**仅覆盖**与当前 `X-Git-Commit`（及 NULL 桶）对应的那一条。同一分支上修改代码并产生新 commit 后，应使用 **新的 `X-Git-Commit`** 上报。管理端 **`POST /api/branch-coverages/coverage-reports`** 可列出该分支下全部上报摘要，详情 **`POST /api/branch-coverages/coverage-report`** 可选 **`reportId`** 查看指定一次；不传 `reportId` 时取该分支下 **`updated_at` 最新** 的一条（与「最近活跃」一致）。若需在**同一 commit** 上丢弃粘性与继承，可使用管理端「重置覆盖率」或 `meta.fileChanges.*.resetLines`。
 
