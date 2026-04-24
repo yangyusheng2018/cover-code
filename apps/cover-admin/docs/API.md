@@ -21,6 +21,8 @@
 
 供前端/SDK 上报 **Istanbul** 单文件 coverage（`statementMap` + `s` 等）。**公开 `@Public`，无需 JWT**。根据 **`X-Project-Code`**、**`X-Git-Branch`** 查找 `branch_coverage`（**每个项目 + 测试分支至多一条**配置；**不**根据 `X-Coverage-Task-Scope` 等头区分）。未配置时 **HTTP 200**，`{ "success": false, "message": "无此项目或者分支" }`。
 
+**增量覆盖率任务（`branch_coverage.task_scope = incremental`）**：入库前若 GitHub **`{主分支}...{测试分支}`** compare 可用，则 **仅写入** 对比中出现且带 patch 行标记的文件；每个文件 **`coverage_file.line_details` 仅保留** diff 新侧上出现在 patch 中的行（与详情 `view=incremental` 范围一致），**不在 diff 范围内的文件不会落库**。`coverage_report.coverage_mode` 对该类任务固定记为 **`incremental`**。compare 失败时记录告警，为兼容仍按原样写入全部路径（避免上报 400）。
+
 **同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file` 行级数据，不新增记录。入库前会将本次 Istanbul 解析结果与 **库内该提交已有快照** 做行级合并：若某行本次未覆盖但此前已标记为已覆盖，则仍保留为已覆盖（`carried: true`），避免浏览器刷新导致 `__coverage__` 归零后再次上报把历史覆盖「冲掉」。**之后**再按 `meta.parentCommit` / `X-Parent-Commit` 与父提交报告合并（见下），顺序为：先粘合同提交历史，再应用父提交继承与 `resetLines`。
 
 **隐式父提交（新 commit 首次上报）**：若请求**未**携带 `X-Parent-Commit` / `meta.parentCommit`，且当前 `git_commit` 在库中**尚不存在**对应 `coverage_report`（即该提交首次入库），服务端会自动选取同分支下 **另一 commit** 中 **`updated_at` 最新** 的一条已有上报作为父快照，对各行做与显式父提交相同的继承合并（`carried`），并把该父 SHA 写入 `coverage_report.parent_commit`。若源码已变，请在 `meta.fileChanges` 中对相关路径声明 **`resetLines`**，这些行将不以父快照为准。已显式声明父提交时，**不会**启用隐式父逻辑。

@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "webpack serve --config webpack.config.cjs",
-    "build": "webpack --config webpack.config.cjs"
+    "build": "webpack --config webpack.config.cjs",
+    "preview": "npm run build && serve dist -l 4178 -s"
   },
   "dependencies": {
     "@istanbul-live/webpack-plugin": "workspace:*",
@@ -16,6 +17,7 @@
     "@types/react-dom": "^18.3.5",
     "css-loader": "^7.1.2",
     "html-webpack-plugin": "^5.6.3",
+    "serve": "^14.2.4",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.2",
     "typescript": "^5.8.3",

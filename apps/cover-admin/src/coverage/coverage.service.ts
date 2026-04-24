@@ -194,6 +194,30 @@ export class CoverageService {
       }
     }
 
+    /**
+     * 增量覆盖率任务：仅持久化主分支 vs 测试分支 GitHub compare 中「有 diff 行」的文件，
+     * 且每文件只保留 patch 中涉及的新侧行号（与详情页 incremental 视图一致）。
+     * compare 不可用时打日志，仍写入全量路径（避免上报失败）。
+     */
+    let incrementalGithubMarks: Map<string, Map<number, "+" | " ">> | null =
+      null;
+    if (bc.taskScope === "incremental") {
+      const mainBr = project.mainBranch?.trim() || "main";
+      const testBr = bc.testBranch.trim() || "";
+      const incDiff = await this.branchDiff.fetchGithubCompareLineMarks(
+        project,
+        mainBr,
+        testBr,
+      );
+      if (incDiff.error) {
+        this.logger.warn(
+          `incremental task ingest: GitHub compare 不可用 (${incDiff.error})，未按 diff 裁剪入库路径`,
+        );
+      } else if (incDiff.pathToMarks.size > 0) {
+        incrementalGithubMarks = incDiff.pathToMarks;
+      }
+    }
+
     type Row = {
       path: string;
       lineDetails: CoverageLineDetail[];
@@ -273,6 +297,18 @@ export class CoverageService {
         );
       }
 
+      if (incrementalGithubMarks) {
+        const rpInc = this.branchDiff.repoPathForCoverageFile(project, path);
+        const marks = incrementalGithubMarks.get(rpInc);
+        if (!marks?.size) {
+          continue;
+        }
+        lineDetails = lineDetails.filter((d) => marks.has(d.line));
+        if (lineDetails.length === 0) {
+          continue;
+        }
+      }
+
       const { coveredLines, uncoveredLines } =
         lineDetailsToHitArrays(lineDetails);
       rows.push({ path, lineDetails, coveredLines, uncoveredLines });
@@ -283,6 +319,8 @@ export class CoverageService {
     }
 
     const diffBaseNorm = this.normCommit(meta.diffBaseCommit ?? undefined);
+    const storedCoverageMode =
+      bc.taskScope === "incremental" ? "incremental" : meta.mode ?? "full";
 
     return this.dataSource.transaction(async (em) => {
       const existingList = await em.find(CoverageReport, {
@@ -306,7 +344,7 @@ export class CoverageService {
         await em.delete(CoverageFile, { reportId: primary.id });
         primary.fileCount = rows.length;
         primary.gitCommit = gc;
-        primary.coverageMode = meta.mode ?? "full";
+        primary.coverageMode = storedCoverageMode;
         primary.parentCommit = effectiveParentCommit;
         primary.diffBaseCommit = diffBaseNorm;
         await em.save(primary);
@@ -316,7 +354,7 @@ export class CoverageService {
         report = em.create(CoverageReport, {
           branchCoverageId: bc.id,
           gitCommit: gc,
-          coverageMode: meta.mode ?? "full",
+          coverageMode: storedCoverageMode,
           parentCommit: effectiveParentCommit,
           diffBaseCommit: diffBaseNorm,
           fileCount: rows.length,
@@ -340,7 +378,7 @@ export class CoverageService {
         success: true as const,
         replaced,
         parentResolved: effectiveParentCommit ? parentResolved : undefined,
-        coverageMode: meta.mode ?? "full",
+        coverageMode: storedCoverageMode,
         message: replaced ? "已覆盖更新" : "已保存",
         reportId: report.id,
         branchCoverageId: bc.id,

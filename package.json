@@ -10,6 +10,7 @@
     "dev:webpack": "pnpm --filter webpack-vue3-demo dev",
     "build:webpack": "pnpm --filter webpack-vue3-demo build",
     "dev:react": "pnpm --filter webpack-react-ts-demo dev",
+    "preview:react": "pnpm --filter webpack-react-ts-demo preview",
     "build:webpack-react": "pnpm --filter webpack-react-ts-demo build",
     "dev:admin": "pnpm --filter cover-admin-bi dev",
     "build:admin": "pnpm --filter cover-admin-bi build",
