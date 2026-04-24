@@ -32,7 +32,7 @@ export interface CoverageLineDetailDto {
   /** 增量视图：unified diff 新侧 `+` 或上下文空格行 */
   diffMark?: '+' | ' '
   /** 详情人工标记（不入父提交合并逻辑） */
-  manualMark?: 'redundant_covered' | 'instrument_excluded'
+  manualMark?: 'redundant_covered' | 'fallback_covered' | 'instrument_excluded'
 }
 
 export interface SourceHintDto {
@@ -166,8 +166,12 @@ function normalizeLineDetail(raw: Record<string, unknown>): CoverageLineDetailDt
     diffMark = dm
   }
   const mm = raw.manualMark ?? raw.manual_mark
-  let manualMark: 'redundant_covered' | 'instrument_excluded' | undefined
-  if (mm === 'redundant_covered' || mm === 'instrument_excluded') {
+  let manualMark: 'redundant_covered' | 'fallback_covered' | 'instrument_excluded' | undefined
+  if (
+    mm === 'redundant_covered' ||
+    mm === 'fallback_covered' ||
+    mm === 'instrument_excluded'
+  ) {
     manualMark = mm
   }
   return {

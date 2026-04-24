@@ -501,7 +501,10 @@ export async function fetchBranchCoverageReportSummaries(
 }
 
 /** `POST /api/branch-coverages/coverage-report` Body: `{ branchCoverageId }`（整数 ≥1，勿传 `id`） */
-export type CoverageManualMarkKind = 'redundant_covered' | 'instrument_excluded'
+export type CoverageManualMarkKind =
+  | 'redundant_covered'
+  | 'fallback_covered'
+  | 'instrument_excluded'
 
 export async function applyCoverageManualMarks(body: {
   branchCoverageId: number

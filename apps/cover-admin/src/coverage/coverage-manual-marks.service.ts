@@ -33,7 +33,11 @@ export class CoverageManualMarksService {
   ) {}
 
   private assertMark(v: unknown): ManualMarkKind {
-    if (v === "redundant_covered" || v === "instrument_excluded") {
+    if (
+      v === "redundant_covered" ||
+      v === "fallback_covered" ||
+      v === "instrument_excluded"
+    ) {
       return v;
     }
     throw new BadRequestException(`非法标记: ${String(v)}`);

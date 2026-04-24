@@ -1,7 +1,10 @@
 import type { CoverageLineDetail } from "./coverage-line-types";
 
 /** 人工标记：不参与父提交继承合并逻辑，仅在本列与入库后再次合并时覆盖展示与统计 */
-export type ManualMarkKind = "redundant_covered" | "instrument_excluded";
+export type ManualMarkKind =
+  | "redundant_covered"
+  | "fallback_covered"
+  | "instrument_excluded";
 
 export interface CoverageFileManualMarks {
   /** 整文件标记（优先级低于行级 lineMarks） */
@@ -44,7 +47,7 @@ export function applyManualMarksToLineDetails(
       };
       return rest as CoverageLineDetail;
     }
-    if (kind === "redundant_covered") {
+    if (kind === "redundant_covered" || kind === "fallback_covered") {
       return {
         ...d,
         instrument: "ok",

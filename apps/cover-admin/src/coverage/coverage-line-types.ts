@@ -20,7 +20,7 @@ export interface CoverageLineDetail {
   /**
    * 详情人工标记（与 `coverage_file.manual_marks` 对应；入库行 JSON 可带此字段便于展示）
    */
-  manualMark?: "redundant_covered" | "instrument_excluded";
+  manualMark?: "redundant_covered" | "fallback_covered" | "instrument_excluded";
 }
 
 export type CoverageMode = 'full' | 'incremental';

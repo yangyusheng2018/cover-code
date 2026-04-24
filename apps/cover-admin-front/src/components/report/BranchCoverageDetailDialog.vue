@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Umbrella } from '@element-plus/icons-vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { CoverageManualMarkKind } from '@/api/branchCoverages'
 import { ElMessage } from 'element-plus'
@@ -169,6 +169,22 @@ const detailFilesView = computed((): CoverageReportFileVm[] => {
     stats: statsFromIncrementalDiffPlusLines(f.lineDetails),
   }))
 })
+
+/** 文件树：按当前详情统计未覆盖行数（增量视图与表格一致） */
+const uncoveredCountByPath = computed(() => {
+  const m = new Map<string, number>()
+  for (const f of detailFilesView.value) {
+    m.set(f.path, f.stats.uncovered)
+  }
+  return m
+})
+
+function fileUncoveredCount(filePath: string | undefined): number {
+  if (!filePath) {
+    return 0
+  }
+  return uncoveredCountByPath.value.get(filePath) ?? 0
+}
 
 function resolveReportIdFromDetail(d: CoverageReportDetailVm | null): number | undefined {
   const r = d?.report
@@ -366,6 +382,15 @@ async function markSelectedFilesInstrumentExcluded() {
   )
 }
 
+async function markSelectedFilesFallback() {
+  if (!selectedFiles.value.length) {
+    return
+  }
+  await submitManualMarks(
+    selectedFiles.value.map((f) => ({ path: f.path, fileMark: 'fallback_covered' as const })),
+  )
+}
+
 async function markSelectedLinesRedundant() {
   const path = currentFile.value?.path
   if (!path || !selectedLineNums.value.length) {
@@ -386,6 +411,18 @@ async function markSelectedLinesInstrumentExcluded() {
   const lineMarks: Record<string, CoverageManualMarkKind> = {}
   for (const n of selectedLineNums.value) {
     lineMarks[String(n)] = 'instrument_excluded'
+  }
+  await submitManualMarks([{ path, lineMarks }])
+}
+
+async function markSelectedLinesFallback() {
+  const path = currentFile.value?.path
+  if (!path || !selectedLineNums.value.length) {
+    return
+  }
+  const lineMarks: Record<string, CoverageManualMarkKind> = {}
+  for (const n of selectedLineNums.value) {
+    lineMarks[String(n)] = 'fallback_covered'
   }
   await submitManualMarks([{ path, lineMarks }])
 }
@@ -643,7 +680,13 @@ function lineClass(state: UiLineState) {
 }
 
 function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
-  return m === 'redundant_covered' ? '人工标记：冗余已覆盖' : '人工标记：插桩排除（移出统计）'
+  if (m === 'redundant_covered') {
+    return '人工标记：冗余已覆盖'
+  }
+  if (m === 'fallback_covered') {
+    return '人工标记：兜底代码（计入覆盖，与冗余行统计一致）'
+  }
+  return '人工标记：插桩排除（移出统计）'
 }
 </script>
 
@@ -753,6 +796,9 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
           <span class="legend-i legend-i--manual-exc" title="人工·插桩排除">
             <el-icon class="legend-i__icon"><CircleClose /></el-icon>
           </span>
+          <span class="legend-i legend-i--manual-fallback" title="人工·兜底代码（计入覆盖）">
+            <el-icon class="legend-i__icon"><Umbrella /></el-icon>
+          </span>
         </div>
 
         <div v-if="canManualMark" class="manual-toolbar manual-toolbar--files">
@@ -776,6 +822,16 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
             @click="markSelectedFilesInstrumentExcluded"
           >
             插桩错误文件 → 移出统计
+          </el-button>
+          <el-button
+            type="success"
+            plain
+            size="small"
+            :disabled="!selectedFiles.length || markingBusy"
+            :loading="markingBusy"
+            @click="markSelectedFilesFallback"
+          >
+            兜底代码文件 → 已覆盖
           </el-button>
         </div>
 
@@ -817,7 +873,10 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
 
         <div class="detail-split">
           <div class="detail-tree">
-            <div class="detail-tree__caption">文件树</div>
+            <div class="detail-tree__caption">
+              文件树
+              <span class="detail-tree__hint">红点：该文件仍有未覆盖行</span>
+            </div>
             <el-scrollbar max-height="min(52vh, 560px)">
               <el-tree
                 v-if="treeData.length"
@@ -828,7 +887,19 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
                 :props="{ label: 'label', children: 'children' }"
                 default-expand-all
                 @node-click="onTreeNodeClick"
-              />
+              >
+                <template #default="{ data }">
+                  <span class="cov-tree-node">
+                    <span
+                      v-if="data.isFile && fileUncoveredCount(data.filePath) > 0"
+                      class="cov-tree-node__miss-dot"
+                      :title="`未覆盖 ${fileUncoveredCount(data.filePath)} 行`"
+                    />
+                    <span v-else-if="data.isFile" class="cov-tree-node__miss-placeholder" />
+                    <span class="cov-tree-node__label">{{ data.label }}</span>
+                  </span>
+                </template>
+              </el-tree>
               <el-empty v-else description="无文件" :image-size="64" />
             </el-scrollbar>
           </div>
@@ -875,6 +946,16 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
               >
                 插桩错误行 → 移出统计
               </el-button>
+              <el-button
+                type="success"
+                plain
+                size="small"
+                :disabled="!selectedLineNums.length || markingBusy"
+                :loading="markingBusy"
+                @click="markSelectedLinesFallback"
+              >
+                兜底代码行 → 已覆盖
+              </el-button>
             </div>
             <div v-loading="sourceLoading" class="source-panel-inner">
               <el-scrollbar v-if="currentFile && displayLines.length" max-height="min(52vh, 560px)">
@@ -905,6 +986,13 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
                       :title="manualMarkTitle('redundant_covered')"
                     >
                       <CircleCheck />
+                    </el-icon>
+                    <el-icon
+                      v-else-if="ln.manualMark === 'fallback_covered'"
+                      class="source-code__manual-icon source-code__manual-icon--fallback"
+                      :title="manualMarkTitle('fallback_covered')"
+                    >
+                      <Umbrella />
                     </el-icon>
                     <el-icon
                       v-else-if="ln.manualMark === 'instrument_excluded'"
@@ -1080,6 +1168,18 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
   color: #e6a23c;
 }
 
+.legend-i--manual-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  background: #e8eaf6;
+}
+
+.legend-i--manual-fallback .legend-i__icon {
+  color: #5c6bc0;
+}
+
 .manual-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1143,6 +1243,47 @@ function manualMarkTitle(m: NonNullable<CoverageLineDetailDto['manualMark']>) {
   border-radius: 4px;
   padding: 8px;
   background: #fafafa;
+}
+
+.detail-tree__hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: #909399;
+  margin-left: 6px;
+}
+
+.cov-tree-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  padding-right: 4px;
+}
+
+.cov-tree-node__miss-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f56c6c;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.cov-tree-node__miss-placeholder {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+}
+
+.cov-tree-node__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-code__manual-icon--fallback {
+  color: #5c6bc0;
 }
 
 .detail-source {
