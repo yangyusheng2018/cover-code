@@ -72,49 +72,6 @@ export function mergeParentLineDetailsWithLineMapping(
   });
 }
 
-/**
- * 无法获得可靠 diff 行映射时的兜底策略：
- * 按「插桩成功行（instrument=ok）」的相对顺序对齐新旧快照，而非绝对行号。
- * 适用于“上方插入/删除导致整段平移”场景，尽量避免未改动块被误重置。
- */
-export function mergeParentLineDetailsByInstrumentOrder(
-  fresh: CoverageLineDetail[],
-  parent: CoverageLineDetail[] | null,
-  resetLines: Set<number>,
-): CoverageLineDetail[] {
-  if (!parent?.length) {
-    return fresh.map((f) => ({ ...f, carried: false }));
-  }
-
-  const freshOk = fresh.filter((f) => f.instrument === "ok");
-  const parentOk = parent.filter((p) => p.instrument === "ok");
-  const freshIdxByLine = new Map<number, number>();
-  for (let i = 0; i < freshOk.length; i++) {
-    freshIdxByLine.set(freshOk[i]!.line, i);
-  }
-
-  return fresh.map((f) => {
-    if (resetLines.has(f.line)) {
-      return { ...f, carried: false };
-    }
-    if (f.instrument !== "ok") {
-      return { ...f, carried: false };
-    }
-    if (f.covered === true) {
-      return { ...f, carried: false };
-    }
-    const idx = freshIdxByLine.get(f.line);
-    if (idx == null || idx < 0 || idx >= parentOk.length) {
-      return { ...f, carried: false };
-    }
-    const p = parentOk[idx]!;
-    if (p.covered === true) {
-      return { ...f, covered: true, carried: true };
-    }
-    return { ...f, carried: false };
-  });
-}
-
 /** 从 line_details 推导兼容用的 covered / uncovered 行号（仅 instrument===ok） */
 export function lineDetailsToHitArrays(details: CoverageLineDetail[]): {
   coveredLines: number[];

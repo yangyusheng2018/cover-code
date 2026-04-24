@@ -7,7 +7,6 @@ import { CoverageFile } from "./entities/coverage-file.entity";
 import { CoverageReport } from "./entities/coverage-report.entity";
 import {
   mergeParentLineDetails,
-  mergeParentLineDetailsByInstrumentOrder,
   mergeParentLineDetailsWithLineMapping,
   lineDetailsToHitArrays,
 } from "./coverage-line-merge";
@@ -145,7 +144,7 @@ export class CoverageService {
 
     /**
      * 新 commit 首次上报且未显式传父提交时：自动取该分支下「另一 commit」中最近更新的一条作为隐式父。
-     * 与显式父提交合并时：GitHub 上可拉 `parent...current` patch 则按 diff 行映射继承，否则退化为按行号。
+     * 与显式父提交合并时：跨提交仅在有远端仓库两提交间的 unified patch（GitHub compare）且能解析行映射时继承，否则不按行号猜对齐。
      */
     if (
       !hadExplicitParentRequest &&
@@ -173,7 +172,10 @@ export class CoverageService {
       }
     }
 
-    /** 父提交 ≠ 当前提交时：拉 GitHub `parent...current` 的 patch，按 unified diff 空格行建立新行→旧行映射 */
+    /**
+     * 父提交 ≠ 当前提交时：通过 GitHub `compare/{parent}...{head}`（两 commit SHA）拉各文件 patch，
+     * 供 unified diff 解析新行→旧行映射（与是否在服务端克隆仓库无关）。
+     */
     let crossCommitPathToPatch: Map<string, string> | null = null;
     if (
       effectiveParentCommit &&
@@ -188,7 +190,7 @@ export class CoverageService {
       );
       if (cmp.error) {
         this.logger.warn(
-          `coverage ingest: parent↔head commit diff unavailable (${cmp.error}); parent merge uses same line numbers where no per-file patch`,
+          `coverage ingest: parent↔head commit diff unavailable (${cmp.error}); cross-commit parent merge skipped without line mapping`,
         );
       } else if (cmp.pathToPatch.size > 0) {
         crossCommitPathToPatch = cmp.pathToPatch;
@@ -273,19 +275,20 @@ export class CoverageService {
         const repoPath = joinPathInRepo(project.relativeDir, path)
           .replace(/\\/g, "/")
           .replace(/^\/+/, "");
-        let newToOld: Map<number, number> | null = null;
-        if (
-          crossCommitPathToPatch &&
+        const isCrossCommit = !!(
           effectiveParentCommit &&
           gc &&
           effectiveParentCommit !== gc
-        ) {
-          const patch = this.pickByRepoPath(
-            crossCommitPathToPatch,
-            project,
-            path,
-            repoPath,
-          );
+        );
+        let newToOld: Map<number, number> | null = null;
+        if (isCrossCommit && crossCommitPathToPatch) {
+          const patch =
+            this.pickByRepoPath(
+              crossCommitPathToPatch,
+              project,
+              path,
+              repoPath,
+            ) ?? null;
           if (patch) {
             const m = parseUnifiedPatchToNewToOldLineMap(patch);
             if (m.size > 0) {
@@ -293,24 +296,16 @@ export class CoverageService {
             }
           }
         }
-        if (newToOld?.size) {
-          lineDetails = mergeParentLineDetailsWithLineMapping(
-            lineDetails,
-            parentDetail,
-            resetLines,
-            newToOld,
-          );
-        } else if (
-          effectiveParentCommit &&
-          gc &&
-          effectiveParentCommit !== gc
-        ) {
-          // 跨 commit 但拿不到可靠行映射时，按插桩行相对顺序兜底，避免绝对行号错位引发误重置
-          lineDetails = mergeParentLineDetailsByInstrumentOrder(
-            lineDetails,
-            parentDetail,
-            resetLines,
-          );
+        if (isCrossCommit) {
+          if (newToOld?.size) {
+            lineDetails = mergeParentLineDetailsWithLineMapping(
+              lineDetails,
+              parentDetail,
+              resetLines,
+              newToOld,
+            );
+          }
+          // 跨提交且无 diff 行映射：不合并父快照，避免误用数据库行号
         } else {
           lineDetails = mergeParentLineDetails(
             lineDetails,
