@@ -6,12 +6,15 @@ export function App(): JSX.Element {
   const [count, setCount] = useState(0);
   const bump = () => {
     console.log('测试率')
+    console.log('插入测试行1');
+    console.log('插入测试行2');
+    console.log('插入测试行3');
+    console.log('插入测试行4');
     if(score > 5){
       console.log('score > 5');
       console.log('score > 5');
       console.log('score > 5');
-      console.log('插入测试行');
-      console.log('插入测试行');
+      console.log('插入测试行1');
       console.log('插入测试行');
       console.log('score > 5');
       console.log('score > 5');
@@ -21,7 +24,7 @@ export function App(): JSX.Element {
       console.log('score <= 5');  
       console.log('score <= 5'); 
       console.log('插入测试行');
-      console.log('插入测试行');
+      console.log('插入测试行1111');
       console.log('插入测试行'); 
       console.log('score <= 5');  
       console.log('score <= 5');  

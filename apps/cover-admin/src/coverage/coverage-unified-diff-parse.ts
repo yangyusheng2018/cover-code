@@ -68,3 +68,73 @@ export function parseUnifiedPatchToNewSideLineMarks(
   }
   return marks;
 }
+
+/**
+ * 从 unified diff 的 `patch` 文本解析「新文件行号 → 旧文件行号」映射，
+ * 仅对 **未改动的上下文行**（前缀空格）建立对应关系；`+` / `-` 行不写入映射。
+ * 用于跨 commit 继承覆盖率时按 diff 对齐行号（插入/删除/偏移由 diff 自然体现）。
+ */
+export function parseUnifiedPatchToNewToOldLineMap(patch: string): Map<number, number> {
+  const map = new Map<number, number>();
+  if (!patch || typeof patch !== "string") {
+    return map;
+  }
+  const lines = patch.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    const hm = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+    if (!hm) {
+      i++;
+      continue;
+    }
+    let curNew = parseInt(hm[3]!, 10);
+    let curOld = parseInt(hm[1]!, 10);
+    i++;
+    while (i < lines.length) {
+      const L = lines[i]!;
+      if (/^@@ -/.test(L)) {
+        break;
+      }
+      if (
+        L.startsWith("diff --git") ||
+        L.startsWith("index ") ||
+        L.startsWith("new file mode") ||
+        L.startsWith("deleted file mode") ||
+        L.startsWith("similarity index") ||
+        L.startsWith("rename from") ||
+        L.startsWith("rename to") ||
+        L.startsWith("Binary files ") ||
+        L.startsWith("--- ") ||
+        L.startsWith("+++ ")
+      ) {
+        i++;
+        continue;
+      }
+      if (L.startsWith("\\")) {
+        i++;
+        continue;
+      }
+      if (!L.length) {
+        i++;
+        continue;
+      }
+      const prefix = L[0]!;
+      if (prefix === "+") {
+        curNew++;
+        i++;
+      } else if (prefix === " ") {
+        map.set(curNew, curOld);
+        curOld++;
+        curNew++;
+        i++;
+      } else if (prefix === "-") {
+        curOld++;
+        i++;
+      } else {
+        i++;
+      }
+    }
+  }
+  return map;
+}

@@ -7,12 +7,16 @@ import { CoverageFile } from "./entities/coverage-file.entity";
 import { CoverageReport } from "./entities/coverage-report.entity";
 import {
   mergeParentLineDetails,
+  mergeParentLineDetailsWithLineMapping,
   lineDetailsToHitArrays,
 } from "./coverage-line-merge";
 import type { CoverageLineDetail } from "./coverage-line-types";
+import { CoverageBranchDiffService } from "./coverage-branch-diff.service";
+import { joinPathInRepo } from "./coverage-source-hint";
 import { isWrappedPayload, normalizeUploadMeta } from "./coverage-upload-meta";
 import { parseIstanbulFileToLineDetails } from "./istanbul-line-coverage";
 import { remapIstanbulPayloadToOriginalSources } from "./coverage-sourcemap-remap";
+import { parseUnifiedPatchToNewToOldLineMap } from "./coverage-unified-diff-parse";
 
 export interface CoverageIngestParams {
   body: Record<string, unknown>;
@@ -38,6 +42,7 @@ export class CoverageService {
     @InjectRepository(CoverageFile)
     private readonly fileRepo: Repository<CoverageFile>,
     private readonly dataSource: DataSource,
+    private readonly branchDiff: CoverageBranchDiffService,
   ) {}
 
   async ingest(params: CoverageIngestParams) {
@@ -138,8 +143,8 @@ export class CoverageService {
     const stickyReport = await this.reportRepo.findOne({ where: stickyWhere });
 
     /**
-     * 新 commit 首次上报且未显式传父提交时：自动取该分支下「另一 commit」中最近更新的一条作为隐式父，
-     * 用 merge 保留上一版已覆盖行（同 mergeParentLineDetails；源码变更行可通过 meta.fileChanges.resetLines 重算）。
+     * 新 commit 首次上报且未显式传父提交时：自动取该分支下「另一 commit」中最近更新的一条作为隐式父。
+     * 与显式父提交合并时：GitHub 上可拉 `parent...current` patch 则按 diff 行映射继承，否则退化为按行号。
      */
     if (
       !hadExplicitParentRequest &&
@@ -164,6 +169,28 @@ export class CoverageService {
       });
       for (const f of stickyFiles) {
         stickySameCommitMap.set(f.path, f.lineDetails);
+      }
+    }
+
+    /** 父提交 ≠ 当前提交时：拉 GitHub `parent...current` 的 patch，按 unified diff 空格行建立新行→旧行映射 */
+    let crossCommitPathToPatch: Map<string, string> | null = null;
+    if (
+      effectiveParentCommit &&
+      gc &&
+      effectiveParentCommit !== gc &&
+      parentFilesMap.size > 0
+    ) {
+      const cmp = await this.branchDiff.fetchGithubComparePatchesBetweenShas(
+        project,
+        effectiveParentCommit,
+        gc,
+      );
+      if (cmp.error) {
+        this.logger.warn(
+          `coverage ingest: parent↔head commit diff unavailable (${cmp.error}); parent merge uses same line numbers where no per-file patch`,
+        );
+      } else if (cmp.pathToPatch.size > 0) {
+        crossCommitPathToPatch = cmp.pathToPatch;
       }
     }
 
@@ -218,10 +245,31 @@ export class CoverageService {
       }
       const parentDetail = parentFilesMap.get(path);
       if (effectiveParentCommit && parentDetail?.length) {
-        lineDetails = mergeParentLineDetails(
+        const repoPath = joinPathInRepo(project.relativeDir, path)
+          .replace(/\\/g, "/")
+          .replace(/^\/+/, "");
+        let newToOld: Map<number, number> | null = null;
+        if (
+          crossCommitPathToPatch &&
+          effectiveParentCommit &&
+          gc &&
+          effectiveParentCommit !== gc
+        ) {
+          const patch =
+            crossCommitPathToPatch.get(repoPath) ||
+            crossCommitPathToPatch.get(path.replace(/\\/g, "/").replace(/^\/+/, ""));
+          if (patch) {
+            const m = parseUnifiedPatchToNewToOldLineMap(patch);
+            if (m.size > 0) {
+              newToOld = m;
+            }
+          }
+        }
+        lineDetails = mergeParentLineDetailsWithLineMapping(
           lineDetails,
           parentDetail,
           resetLines,
+          newToOld,
         );
       }
 

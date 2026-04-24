@@ -32,6 +32,46 @@ export function mergeParentLineDetails(
   });
 }
 
+/**
+ * 与 {@link mergeParentLineDetails} 相同，但当提供 `newToOld`（新源码行号 → 父提交行号）时，
+ * 按 diff 对齐后再查父快照；无映射或映射为空时退化为按行号合并。
+ */
+export function mergeParentLineDetailsWithLineMapping(
+  fresh: CoverageLineDetail[],
+  parent: CoverageLineDetail[] | null,
+  resetLines: Set<number>,
+  newToOld: Map<number, number> | null | undefined,
+): CoverageLineDetail[] {
+  if (!newToOld?.size) {
+    return mergeParentLineDetails(fresh, parent, resetLines);
+  }
+  if (!parent?.length) {
+    return fresh.map((f) => ({ ...f, carried: false }));
+  }
+  const parentByLine = new Map(parent.map((p) => [p.line, p]));
+
+  return fresh.map((f) => {
+    if (resetLines.has(f.line)) {
+      return { ...f, carried: false };
+    }
+    if (f.instrument !== "ok") {
+      return { ...f, carried: false };
+    }
+    if (f.covered === true) {
+      return { ...f, carried: false };
+    }
+    const oldLine = newToOld.get(f.line);
+    if (oldLine == null) {
+      return { ...f, carried: false };
+    }
+    const p = parentByLine.get(oldLine);
+    if (p?.instrument === "ok" && p.covered === true) {
+      return { ...f, covered: true, carried: true };
+    }
+    return { ...f, carried: false };
+  });
+}
+
 /** 从 line_details 推导兼容用的 covered / uncovered 行号（仅 instrument===ok） */
 export function lineDetailsToHitArrays(details: CoverageLineDetail[]): {
   coveredLines: number[];

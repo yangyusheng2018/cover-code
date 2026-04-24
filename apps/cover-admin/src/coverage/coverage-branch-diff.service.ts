@@ -102,6 +102,83 @@ export class CoverageBranchDiffService {
     return { pathToMarks };
   }
 
+  /**
+   * GitHub `compare/{baseSha}...{headSha}`（两提交 SHA），返回仓库相对路径 → unified `patch` 原文。
+   * 用于跨 commit 覆盖率合并时解析行号映射（无 patch 的文件多为二进制或未变且无 hunk）。
+   */
+  async fetchGithubComparePatchesBetweenShas(
+    project: Project,
+    baseSha: string,
+    headSha: string,
+  ): Promise<{ pathToPatch: Map<string, string>; error?: string }> {
+    const gh = parseGithubOwnerRepo(project.gitUrl);
+    if (!gh) {
+      return {
+        pathToPatch: new Map(),
+        error:
+          '跨提交 diff 暂仅支持 GitHub 仓库（https://github.com/... 或 git@github.com:owner/repo）。',
+      };
+    }
+    const b = baseSha.trim();
+    const h = headSha.trim();
+    if (!b || !h) {
+      return { pathToPatch: new Map(), error: '父提交或当前提交 SHA 为空' };
+    }
+    const spec = `${encodeURIComponent(b)}...${encodeURIComponent(h)}`;
+    const url = `https://api.github.com/repos/${gh.owner}/${gh.repo}/compare/${spec}`;
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': UA,
+    };
+    const t = project.repoToken?.trim();
+    if (t) {
+      headers.Authorization = `Bearer ${t}`;
+    }
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { pathToPatch: new Map(), error: `请求 GitHub compare 失败：${msg}` };
+    }
+    const rawText = await res.text();
+    if (!res.ok) {
+      let extra = rawText.slice(0, 400);
+      try {
+        const j = JSON.parse(rawText) as { message?: string };
+        if (j?.message) {
+          extra = j.message;
+        }
+      } catch {
+        /* ignore */
+      }
+      return {
+        pathToPatch: new Map(),
+        error: `GitHub compare（提交间）返回 ${res.status}：${extra}`,
+      };
+    }
+    let json: GithubCompareJson;
+    try {
+      json = JSON.parse(rawText) as GithubCompareJson;
+    } catch {
+      return { pathToPatch: new Map(), error: 'GitHub compare 响应非 JSON' };
+    }
+    const pathToPatch = new Map<string, string>();
+    for (const f of json.files ?? []) {
+      const fn = (f.filename ?? '').replace(/\\/g, '/').replace(/^\/+/, '');
+      const patch = f.patch;
+      if (!fn || !patch) {
+        continue;
+      }
+      pathToPatch.set(fn, patch);
+    }
+    return { pathToPatch };
+  }
+
   /** 将上报文件 path 转为与 GitHub compare `filename` 对齐的仓库路径 */
   repoPathForCoverageFile(project: Project, coverageFilePath: string): string {
     return joinPathInRepo(project.relativeDir, coverageFilePath).replace(/\\/g, '/');
