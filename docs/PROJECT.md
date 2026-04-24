@@ -69,6 +69,7 @@ pnpm install
 |------|------|
 | [模块关系说明.md](./模块关系说明.md) | monorepo 目录职责、mermaid 总览 |
 | [../README.md](../README.md) | 仓库入口简述与链接 |
+| [../BLOG-覆盖率平台入门.md](../BLOG-覆盖率平台入门.md) | 技术博客式：SDK、管理端安装、项目与覆盖率任务 |
 | `sdk/core/README.md` | core API 与上报选项 |
 | `sdk/vite-plugin/README.md` | Vite 插件配置与排错 |
 | `sdk/webpack-plugin/README.md` | Webpack 插件配置与 source map |
