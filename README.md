@@ -1,6 +1,7 @@
 # cover-code（pnpm monorepo）
 
-各目录职责、上下游关系与数据流见 **[`docs/模块关系说明.md`](docs/模块关系说明.md)**。
+- **总览与数据流（推荐先读）**：[**`docs/PROJECT.md`**](docs/PROJECT.md)
+- **模块关系图与目录说明**：[**`docs/模块关系说明.md`**](docs/模块关系说明.md)
 
 本仓库将以下内容放在同一 **pnpm workspace** 中管理：
 
@@ -11,13 +12,13 @@
 
 ## 结构
 
-- `sdk/core`：生成内联上报脚本 `buildCoverageUploadInlineScript`
-- `sdk/vite-plugin`：`istanbulLiveVitePlugin`（`vite-plugin-istanbul` + 上报）
-- `sdk/webpack-plugin`：`IstanbulLiveWebpackPlugin`（`webpack-plugin-istanbul` + 可选上报）
-- `sdk/instrument`：Babel + `babel-plugin-istanbul` 辅助
+- `sdk/core`（[**README**](sdk/core/README.md)）：`istanbul-live-core`，上报脚本与路径/Git 解析
+- `sdk/vite-plugin`（[**README**](sdk/vite-plugin/README.md)）：`istanbulLiveVitePlugin`
+- `sdk/webpack-plugin`（[**README**](sdk/webpack-plugin/README.md)）：`IstanbulLiveWebpackPlugin`
+- `sdk/instrument`（[**README**](sdk/instrument/README.md)）：`istanbul-live-babel`，Babel 插桩辅助
 - `examples/*`：Vite / Webpack 演示与覆盖率接收服务
-- `apps/cover-admin-front`：Vue 3 + Vite 管理前端
-- `apps/cover-admin`：NestJS 管理端 API
+- `apps/cover-admin-front`（[**README**](apps/cover-admin-front/README.md)）：Vue 3 管理前端（包名 `cover-admin-bi`）
+- `apps/cover-admin`：NestJS 管理端 API（接口文档见 `apps/cover-admin/docs/API.md`）
 
 ## 使用
 
@@ -33,4 +34,4 @@ pnpm install
 
 环境变量（可选）：`COVERAGE_RECEIVER_PORT`、`COVERAGE_RECEIVER_HOST`。
 
-更详细的插件说明与常见问题见原 `test-cover` 的 README 内容；路径上已将 `packages/` 改为 `sdk/`。
+插件与前端说明见各包目录 **`README.md`** 与 **`docs/PROJECT.md`**。
