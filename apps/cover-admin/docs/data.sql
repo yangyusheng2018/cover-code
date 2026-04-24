@@ -142,7 +142,7 @@ CREATE TABLE `branch_coverage` (
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_bc_project_branch_scope` (`project_id`, `test_branch`, `task_scope`),
+  UNIQUE KEY `uk_bc_project_branch` (`project_id`, `test_branch`),
   KEY `idx_bc_project` (`project_id`),
   CONSTRAINT `fk_bc_project` FOREIGN KEY (`project_id`) REFERENCES `project` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分支覆盖率配置';

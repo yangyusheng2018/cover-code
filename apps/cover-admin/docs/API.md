@@ -19,7 +19,7 @@
 
 ## 二、覆盖率上报 `/api/coverage`
 
-供前端/SDK 上报 **Istanbul** 单文件 coverage（`statementMap` + `s` 等）。**公开 `@Public`，无需 JWT**。根据 **`X-Project-Code`**、**`X-Git-Branch`**、**`X-Coverage-Task-Scope`（可选，默认 `full`）** 查找 `branch_coverage`，须与库中 **`task_scope`**（全量 / 增量任务）一致；未配置时 **HTTP 200**，`{ "success": false, "message": "…" }`。
+供前端/SDK 上报 **Istanbul** 单文件 coverage（`statementMap` + `s` 等）。**公开 `@Public`，无需 JWT**。根据 **`X-Project-Code`**、**`X-Git-Branch`** 查找 `branch_coverage`（**每个项目 + 测试分支至多一条**配置；**不**根据 `X-Coverage-Task-Scope` 等头区分）。未配置时 **HTTP 200**，`{ "success": false, "message": "无此项目或者分支" }`。
 
 **同一 `branch_coverage` + 同一 `git_commit`（`X-Git-Commit`，均未传则视为 `NULL` 桶）** 再次上报时 **更新同一条 `coverage_report`** 并替换 `coverage_file`，不新增记录。
 
@@ -36,7 +36,6 @@
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `X-Project-Code`     | 项目唯一 `code`（必填）                                                                                                                 |
 | `X-Git-Branch`       | 测试分支，须与「分支覆盖率」中 `test_branch` 一致（必填）                                                                               |
-| `X-Coverage-Task-Scope` | `full`（默认）或 `incremental`，须与对应 `branch_coverage.task_scope` 一致；增量任务上报须显式传 `incremental` |
 | `X-Git-Commit`       | 当前提交 SHA，写入 `coverage_report.git_commit`                                                                                         |
 | `X-Parent-Commit`    | 父提交；若库中已有该提交的 `coverage_report`，则对 **未出现在 `meta.fileChanges.*.resetLines` 中的行** 继承父提交「已覆盖」状态（见下） |
 | `X-Coverage-Mode`    | `full`（默认）或 `incremental`；与 `meta.mode` 二选一，**body.meta 优先**                                                               |
@@ -195,7 +194,7 @@
 | POST | `/api/branch-coverages/coverage-report` | `branch-coverage:detail` | 见上文「覆盖率详情」。                                                                                                                                                                                            |
 | POST | `/api/branch-coverages/source-file`     | `branch-coverage:detail` | 见上文「source-file」：按 `path` 从远程 HTTP raw 拉取与上报 commit 一致的源码正文。                                                                                                                               |
 | POST | `/api/branch-coverages/reset-coverage`  | `branch-coverage:update` | **清空覆盖率**：请求体 `branchCoverageId`。删除该配置下全部 `coverage_report`（级联删除 `coverage_file`），**不删除** `branch_coverage` 记录本身。返回 `deletedReportCount`。                                     |
-| POST | `/api/branch-coverages/create`          | `branch-coverage:create` | 请求体：`projectId`、`testBranch`、可选 **`taskScope`**（`full` \| `incremental`，默认 `full`）。同一 `projectId` 下 **`test_branch` + `task_scope`** 不可重复。                                                                                                                                    |
+| POST | `/api/branch-coverages/create`          | `branch-coverage:create` | 请求体：`projectId`、`testBranch`、可选 **`taskScope`**（`full` \| `incremental`，默认 `full`）。**同一 `projectId` + `test_branch` 全局仅允许一条**（不可并存两条）；`task_scope` 仅决定归属全量/增量管理列表。                                                                                                                                    |
 | POST | `/api/branch-coverages/update`          | `branch-coverage:update` | 请求体：`id`；可选 `projectId`、`testBranch`。                                                                                                                                                                    |
 | POST | `/api/branch-coverages/delete`          | `branch-coverage:delete` | 请求体：`id`。                                                                                                                                                                                                    |
 

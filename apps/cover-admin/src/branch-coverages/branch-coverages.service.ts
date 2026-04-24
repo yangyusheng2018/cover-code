@@ -58,13 +58,11 @@ export class BranchCoveragesService {
     const taskScope: 'full' | 'incremental' =
       dto.taskScope === 'incremental' ? 'incremental' : 'full';
     const dup = await this.repo.findOne({
-      where: { projectId: dto.projectId, testBranch: tb, taskScope },
+      where: { projectId: dto.projectId, testBranch: tb },
     });
     if (dup) {
       throw new ConflictException(
-        taskScope === 'incremental'
-          ? '该项目下已存在相同测试分支的增量覆盖率任务'
-          : '该项目下已存在相同测试分支的全量覆盖率任务',
+        '该「项目 + 测试分支」已存在覆盖率配置，同分支仅允许一条（不可同时维护全量与增量两条）',
       );
     }
     const row = this.repo.create({
@@ -92,13 +90,11 @@ export class BranchCoveragesService {
     if (dto.testBranch != null) {
       const tb = dto.testBranch.trim();
       const dup = await this.repo.findOne({
-        where: { projectId: pid, testBranch: tb, taskScope: row.taskScope },
+        where: { projectId: pid, testBranch: tb },
       });
       if (dup && dup.id !== row.id) {
         throw new ConflictException(
-          row.taskScope === 'incremental'
-            ? '该项目下已存在相同测试分支的增量覆盖率任务'
-            : '该项目下已存在相同测试分支的全量覆盖率任务',
+          '该「项目 + 测试分支」已存在其他覆盖率配置，同分支仅允许一条',
         );
       }
       row.testBranch = tb;

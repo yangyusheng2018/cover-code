@@ -202,6 +202,11 @@ onMounted(async () => {
       </div>
     </template>
 
+    <p class="hint">
+      同一「项目 + 测试分支」在库中<strong>仅允许一条</strong>配置（与「增量覆盖率」页互斥）；本页仅列出
+      <code>task_scope = full</code> 的记录。若分支已在增量页配置，需先删除后再于此页创建，或保留其一。
+    </p>
+
     <el-table v-loading="loading" :data="rows" border stripe style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="projectId" label="项目 ID" width="90" />
@@ -305,6 +310,13 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
 }
 
 .pager {

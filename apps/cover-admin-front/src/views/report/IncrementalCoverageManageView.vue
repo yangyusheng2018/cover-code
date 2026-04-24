@@ -203,9 +203,8 @@ onMounted(async () => {
     </template>
 
     <p class="hint">
-      此处仅管理<strong>增量覆盖率任务</strong>（与全量页数据隔离）；上报时请求头需带
-      <code>X-Coverage-Task-Scope: incremental</code> 与配置一致。查看详情时按主分支与测试分支在 GitHub
-      上的 diff 过滤行与文件（需 GitHub 与 Token 时同全量说明）。
+      此处仅列出 <code>task_scope = incremental</code> 的配置；同一「项目 + 测试分支」在库中<strong>仅允许一条</strong>记录（与全量页互斥，不可并存两条）。
+      上报 <code>/api/coverage/upload</code> 按项目 code + 分支匹配该唯一配置。若需从全量改为增量（或反之），请先删除原配置再在对应页面新建。
     </p>
 
     <el-table v-loading="loading" :data="rows" border stripe style="width: 100%">

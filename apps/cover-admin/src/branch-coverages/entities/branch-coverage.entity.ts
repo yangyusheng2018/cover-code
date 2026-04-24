@@ -11,7 +11,7 @@ import {
 import { Project } from '../../projects/entities/project.entity';
 
 @Entity('branch_coverage')
-@Unique('uk_bc_project_branch_scope', ['projectId', 'testBranch', 'taskScope'])
+@Unique('uk_bc_project_branch', ['projectId', 'testBranch'])
 export class BranchCoverage {
   @PrimaryGeneratedColumn({ type: 'bigint', unsigned: true })
   id: number;
@@ -28,8 +28,8 @@ export class BranchCoverage {
   testBranch: string;
 
   /**
-   * full=全量覆盖率任务（全量管理页）；incremental=增量覆盖率任务（增量管理页）。
-   * 与 (project_id, test_branch) 共同唯一；上报需带 `X-Coverage-Task-Scope` 对齐。
+   * full=归属「全量覆盖率管理」列表；incremental=归属「增量覆盖率」列表。
+   * 同一 (project_id, test_branch) 全局仅一条记录，不可全量+增量并存两条。
    */
   @Column({ name: 'task_scope', type: 'varchar', length: 16, default: 'full' })
   taskScope: 'full' | 'incremental';
