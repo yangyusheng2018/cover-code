@@ -203,11 +203,6 @@ onMounted(async () => {
       </div>
     </template>
 
-    <p class="hint">
-      此处仅列出 <code>task_scope = incremental</code> 的配置；同一「项目 + 测试分支」在库中<strong>仅允许一条</strong>记录（与全量页互斥，不可并存两条）。
-      上报 <code>/api/coverage/upload</code> 按项目 code + 分支匹配该唯一配置。若需从全量改为增量（或反之），请先删除原配置再在对应页面新建。
-    </p>
-
     <el-table v-loading="loading" :data="rows" border stripe style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="projectId" label="项目 ID" width="90" />
