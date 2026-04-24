@@ -7,6 +7,7 @@ import { CoverageFile } from "./entities/coverage-file.entity";
 import { CoverageReport } from "./entities/coverage-report.entity";
 import {
   mergeParentLineDetails,
+  mergeParentLineDetailsByInstrumentOrder,
   mergeParentLineDetailsWithLineMapping,
   lineDetailsToHitArrays,
 } from "./coverage-line-merge";
@@ -292,12 +293,31 @@ export class CoverageService {
             }
           }
         }
-        lineDetails = mergeParentLineDetailsWithLineMapping(
-          lineDetails,
-          parentDetail,
-          resetLines,
-          newToOld,
-        );
+        if (newToOld?.size) {
+          lineDetails = mergeParentLineDetailsWithLineMapping(
+            lineDetails,
+            parentDetail,
+            resetLines,
+            newToOld,
+          );
+        } else if (
+          effectiveParentCommit &&
+          gc &&
+          effectiveParentCommit !== gc
+        ) {
+          // 跨 commit 但拿不到可靠行映射时，按插桩行相对顺序兜底，避免绝对行号错位引发误重置
+          lineDetails = mergeParentLineDetailsByInstrumentOrder(
+            lineDetails,
+            parentDetail,
+            resetLines,
+          );
+        } else {
+          lineDetails = mergeParentLineDetails(
+            lineDetails,
+            parentDetail,
+            resetLines,
+          );
+        }
       }
 
       if (incrementalGithubMarks) {
