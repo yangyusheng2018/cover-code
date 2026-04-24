@@ -124,14 +124,15 @@ async function save() {
   }
 }
 
+/** 删除本条任务配置，并级联删除其下全部覆盖率上报数据 */
 async function onDelete(row: BranchCoverageRow) {
   await ElMessageBox.confirm(
-    `删除「${row.projectName}」的测试分支「${row.testBranch}」？`,
-    '提示',
-    { type: 'warning' },
+    `将删除项目「${row.projectName}」、测试分支「${row.testBranch}」的本条任务，并删除其下全部覆盖率上报数据。此操作不可恢复。是否继续？`,
+    '删除',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
   )
   await api.deleteBranchCoverage(row.id)
-  ElMessage.success('已删除')
+  ElMessage.success('已删除本条任务及关联上报数据')
   await load()
 }
 

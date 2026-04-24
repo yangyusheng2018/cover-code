@@ -283,6 +283,7 @@
 | `menu.project`         | `/system/project`         | 项目管理页                                                         |
 | `menu.branch_coverage` | `/system/branch-coverage` | 分支覆盖率页                                                       |
 | `menu.incremental_coverage` | `/system/incremental-coverage` | 增量覆盖率页（前端实际路由为 `/report/incremental-coverage`，与 UI 路径成对门禁） |
+| `btn.incremental_coverage.query` / `.add` / `.detail` / `.reset` / `.edit` / `.remove` | — | **增量覆盖率**页内按钮（与全量页 `btn.branch_coverage.*` 解耦，角色可单独授权） |
 | 其它 `btn.*`           | —                         | 各页内其余按钮                                                     |
 
 **种子「用户角色」**（`role.code = super_admin`，展示名可为「用户角色」）：种子通过 `INSERT INTO role_ui_permission SELECT 1, id FROM ui_permission` 绑定**全部** UI 节点；接口权限为 `SELECT 1, id FROM api_permission`；初始用户 `admin` 通过 `user_role` 绑定该角色。运行时**不**因 `super_admin` 编码而跳过上述绑定校验。

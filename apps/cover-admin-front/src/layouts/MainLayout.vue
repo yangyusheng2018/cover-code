@@ -138,13 +138,13 @@ async function submitChangePassword() {
   <div class="common-layout">
     <el-container class="common-layout__outer">
       <el-aside width="220px" class="aside">
-        <div class="aside__brand">管理后台</div>
+        <div class="aside__brand">覆盖率上报平台</div>
         <LayoutAsideMenu />
       </el-aside>
       <el-container class="right-inner">
         <el-header class="header">
           <div class="header__left">
-            <span class="header__title">{{ route.meta.title ?? '管理后台' }}</span>
+            <span class="header__title">{{ route.meta.title ?? '覆盖率上报平台' }}</span>
           </div>
           <div class="header__right">
             <span class="header__user">{{ displayName }}</span>
@@ -204,7 +204,7 @@ async function submitChangePassword() {
             </keep-alive>
           </router-view>
         </el-main>
-        <el-footer class="footer">管理后台 · Element Plus</el-footer>
+        <el-footer class="footer">覆盖率上报平台 · Element Plus</el-footer>
       </el-container>
     </el-container>
 

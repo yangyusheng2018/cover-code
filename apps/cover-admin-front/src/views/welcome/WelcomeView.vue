@@ -8,7 +8,7 @@ defineOptions({ name: 'WelcomeView' })
       <template #header>
         <span class="welcome__title">欢迎</span>
       </template>
-      <p class="welcome__text">欢迎使用管理后台。</p>
+      <p class="welcome__text">欢迎使用覆盖率上报平台。</p>
     </el-card>
   </div>
 </template>

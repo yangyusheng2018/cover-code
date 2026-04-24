@@ -124,14 +124,15 @@ async function save() {
   }
 }
 
+/** 删除本条任务配置，并级联删除其下全部覆盖率上报数据 */
 async function onDelete(row: BranchCoverageRow) {
   await ElMessageBox.confirm(
-    `删除「${row.projectName}」的测试分支「${row.testBranch}」？`,
-    '提示',
-    { type: 'warning' },
+    `将删除项目「${row.projectName}」、测试分支「${row.testBranch}」的本条任务，并删除其下全部覆盖率上报数据。此操作不可恢复。是否继续？`,
+    '删除',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
   )
   await api.deleteBranchCoverage(row.id)
-  ElMessage.success('已删除')
+  ElMessage.success('已删除本条任务及关联上报数据')
   await load()
 }
 
@@ -189,13 +190,13 @@ onMounted(async () => {
             @keyup.enter="load"
           />
           <el-button
-            v-ui-code="'btn.branch_coverage.query'"
+            v-ui-code="'btn.incremental_coverage.query'"
             type="primary"
             @click="((query.page = 1), load())"
           >
             查询
           </el-button>
-          <el-button v-ui-code="'btn.branch_coverage.add'" type="success" @click="openCreate">
+          <el-button v-ui-code="'btn.incremental_coverage.add'" type="success" @click="openCreate">
             新建
           </el-button>
         </div>
@@ -215,22 +216,22 @@ onMounted(async () => {
       <el-table-column prop="testBranch" label="测试分支" min-width="140" />
       <el-table-column label="操作" width="320" fixed="right">
         <template #default="{ row }">
-          <el-button v-ui-code="'btn.branch_coverage.detail'" type="primary" link @click="openDetail(row)">
+          <el-button v-ui-code="'btn.incremental_coverage.detail'" type="primary" link @click="openDetail(row)">
             查看详情
           </el-button>
           <el-button
-            v-ui-code="'btn.branch_coverage.reset'"
+            v-ui-code="'btn.incremental_coverage.reset'"
             type="warning"
             link
             @click="onResetCoverage(row)"
           >
             重置覆盖率
           </el-button>
-          <el-button v-ui-code="'btn.branch_coverage.edit'" type="primary" link @click="openEdit(row)">
+          <el-button v-ui-code="'btn.incremental_coverage.edit'" type="primary" link @click="openEdit(row)">
             编辑
           </el-button>
           <el-button
-            v-ui-code="'btn.branch_coverage.remove'"
+            v-ui-code="'btn.incremental_coverage.remove'"
             type="danger"
             link
             @click="onDelete(row)"

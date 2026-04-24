@@ -66,6 +66,10 @@ export class ProjectsService {
     return this.toPublic(saved);
   }
 
+  /**
+   * 删除项目；`branch_coverage.project_id` 等为 ON DELETE CASCADE，
+   * 会链式删除分支覆盖率、coverage_report、coverage_file。
+   */
   async remove(dto: DeleteProjectDto): Promise<void> {
     const row = await this.repo.findOne({ where: { id: dto.id } });
     if (!row) throw new NotFoundException("项目不存在");

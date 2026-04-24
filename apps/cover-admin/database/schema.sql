@@ -292,7 +292,13 @@ INSERT INTO `ui_permission` (`id`, `parent_id`, `type`, `name`, `code`, `path`, 
 (36, 33, 'button', '覆盖率-编辑', 'btn.branch_coverage.edit', NULL, 3, 0, NULL),
 (37, 33, 'button', '覆盖率-删除', 'btn.branch_coverage.delete', NULL, 4, 0, NULL),
 (38, 33, 'button', '覆盖率-重置', 'btn.branch_coverage.reset', NULL, 5, 0, NULL),
-(39, 1, 'menu', '增量覆盖率', 'menu.incremental_coverage', '/system/incremental-coverage', 14, 1, NULL);
+(39, 1, 'menu', '增量覆盖率', 'menu.incremental_coverage', '/system/incremental-coverage', 14, 1, NULL),
+(40, 39, 'button', '增量覆盖率-查询', 'btn.incremental_coverage.query', NULL, 1, 0, NULL),
+(41, 39, 'button', '增量覆盖率-新增', 'btn.incremental_coverage.add', NULL, 2, 0, NULL),
+(42, 39, 'button', '增量覆盖率-查看详情', 'btn.incremental_coverage.detail', NULL, 3, 0, NULL),
+(43, 39, 'button', '增量覆盖率-重置', 'btn.incremental_coverage.reset', NULL, 4, 0, NULL),
+(44, 39, 'button', '增量覆盖率-编辑', 'btn.incremental_coverage.edit', NULL, 5, 0, NULL),
+(45, 39, 'button', '增量覆盖率-删除', 'btn.incremental_coverage.remove', NULL, 6, 0, NULL);
 
 -- 用户角色（id=1）拥有当前库中全部 UI 权限
 INSERT INTO `role_ui_permission` (`role_id`, `ui_permission_id`)
@@ -311,7 +317,7 @@ INSERT INTO `user` (`id`, `username`, `password_hash`, `email`) VALUES
 INSERT INTO `user_role` (`user_id`, `role_id`) VALUES (1, 1);
 
 ALTER TABLE `role` AUTO_INCREMENT = 2;
-ALTER TABLE `ui_permission` AUTO_INCREMENT = 39;
+ALTER TABLE `ui_permission` AUTO_INCREMENT = 46;
 ALTER TABLE `user` AUTO_INCREMENT = 2;
 
 -- ----------------------------

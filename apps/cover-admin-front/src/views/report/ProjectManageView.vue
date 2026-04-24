@@ -142,9 +142,13 @@ async function save() {
 }
 
 async function onDelete(row: ProjectRow) {
-  await ElMessageBox.confirm(`删除项目「${row.name}」？`, '提示', { type: 'warning' })
+  await ElMessageBox.confirm(
+    `将删除项目「${row.name}」（code：${row.code}）。数据库会级联删除该项目下全部分支覆盖率配置、覆盖率上报及文件明细，且不可恢复。是否继续？`,
+    '删除项目',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+  )
   await api.deleteProject(row.id)
-  ElMessage.success('已删除')
+  ElMessage.success('已删除项目及关联数据')
   await load()
 }
 
@@ -189,7 +193,7 @@ onMounted(load)
           <el-button v-ui-code="'btn.project.edit'" type="primary" link @click="openEdit(row)">
             编辑
           </el-button>
-          <el-button v-ui-code="'btn.project.remove'" type="danger" link @click="onDelete(row)">
+          <el-button v-ui-code="'btn.project.delete'" type="danger" link @click="onDelete(row)">
             删除
           </el-button>
         </template>

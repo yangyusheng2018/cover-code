@@ -38,7 +38,7 @@ async function onSubmit() {
   <div class="login-page">
     <el-card class="login-card" shadow="hover">
       <template #header>
-        <div class="login-card__title">管理后台登录</div>
+        <div class="login-card__title">覆盖率上报平台</div>
       </template>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="72px" @submit.prevent>
         <el-form-item label="用户名" prop="username">
