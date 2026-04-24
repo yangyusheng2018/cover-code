@@ -14,6 +14,13 @@ export function App(): JSX.Element {
     }else{
       console.log('score <= 5');  
       console.log('score <= 5');  
+      console.log('score <= 5'); 
+      console.log('插入测试行');
+      console.log('插入测试行'); 
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
+      console.log('score <= 5');  
     }
     setScore((s) => s + 1);
   };
