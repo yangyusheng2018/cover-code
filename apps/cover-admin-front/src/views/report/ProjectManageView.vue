@@ -1,10 +1,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'ProjectManageView' })
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import * as api from '@/api/projects'
 import type { ProjectRow } from '@/api/projects'
+
+/** 为 true 时显示「相对目录」表单项与列表列（当前先关闭，新建默认 `/`） */
+const SHOW_RELATIVE_PATH_IN_UI = false
 
 const loading = ref(false)
 const rows = ref<ProjectRow[]>([])
@@ -36,13 +39,18 @@ const form = reactive<{
   repoToken: '',
 })
 
-const rules: FormRules = {
-  name: [{ required: true, message: '必填', trigger: 'blur' }],
-  code: [{ required: true, message: '必填', trigger: 'blur' }],
-  gitUrl: [{ required: true, message: '必填', trigger: 'blur' }],
-  mainBranch: [{ required: true, message: '必填', trigger: 'blur' }],
-  relativePath: [{ required: true, message: '必填', trigger: 'blur' }],
-}
+const rules = computed((): FormRules => {
+  const r: FormRules = {
+    name: [{ required: true, message: '必填', trigger: 'blur' }],
+    code: [{ required: true, message: '必填', trigger: 'blur' }],
+    gitUrl: [{ required: true, message: '必填', trigger: 'blur' }],
+    mainBranch: [{ required: true, message: '必填', trigger: 'blur' }],
+  }
+  if (SHOW_RELATIVE_PATH_IN_UI) {
+    r.relativePath = [{ required: true, message: '必填', trigger: 'blur' }]
+  }
+  return r
+})
 
 async function load() {
   loading.value = true
@@ -66,7 +74,7 @@ function openCreate() {
   form.code = ''
   form.gitUrl = ''
   form.mainBranch = 'master'
-  form.relativePath = ''
+  form.relativePath = SHOW_RELATIVE_PATH_IN_UI ? '' : '/'
   form.repoToken = ''
   editRepoTokenBaseline.value = ''
   dialogVisible.value = true
@@ -106,13 +114,14 @@ async function save() {
   saving.value = true
   try {
     const token = form.repoToken.trim()
+    const relativePathForCreate = SHOW_RELATIVE_PATH_IN_UI ? form.relativePath.trim() : '/'
     if (form.id == null) {
       await api.createProject({
         name: form.name.trim(),
         code: form.code.trim(),
         gitUrl: form.gitUrl.trim(),
         mainBranch: form.mainBranch.trim() || 'master',
-        relativePath: form.relativePath.trim(),
+        relativePath: relativePathForCreate,
         ...(token ? { repoToken: token } : {}),
       })
       ElMessage.success('已创建')
@@ -187,7 +196,13 @@ onMounted(load)
         </template>
       </el-table-column>
       <el-table-column prop="mainBranch" label="主分支" width="120" />
-      <el-table-column prop="relativePath" label="相对目录" min-width="160" show-overflow-tooltip />
+      <el-table-column
+        v-if="SHOW_RELATIVE_PATH_IN_UI"
+        prop="relativePath"
+        label="相对目录"
+        min-width="160"
+        show-overflow-tooltip
+      />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button v-ui-code="'btn.project.edit'" type="primary" link @click="openEdit(row)">
@@ -229,7 +244,7 @@ onMounted(load)
       <el-form-item label="主分支" prop="mainBranch">
         <el-input v-model="form.mainBranch" placeholder="默认 master" />
       </el-form-item>
-      <el-form-item label="相对目录" prop="relativePath">
+      <el-form-item v-if="SHOW_RELATIVE_PATH_IN_UI" label="相对目录" prop="relativePath">
         <el-input v-model="form.relativePath" placeholder="仓库内相对路径，如 packages/app" />
       </el-form-item>
       <el-form-item label="仓库 Token" prop="repoToken">
