@@ -105,6 +105,42 @@ const uiMenuTree = computed(() => filterSidebarTree(auth.effectiveUiTree))
 
 const activeMenu = computed(() => route.path)
 
+/** 与 UiMenuNodes 一致：带子级的 menu 节点 */
+function navigableChildren(n: UiPermissionNode): UiPermissionNode[] {
+  return (n.children ?? []).filter(
+    (c) => (c.type === 'directory' || c.type === 'menu') && isUiShownInSidebarMenu(c),
+  )
+}
+
+function isBranchMenu(n: UiPermissionNode) {
+  return n.type === 'menu' && navigableChildren(n).length > 0
+}
+
+/** 收集所有 el-sub-menu 的 index，供 default-openeds 默认展开 */
+function collectSubMenuOpenIndices(nodes: UiPermissionNode[]): string[] {
+  const out: string[] = []
+  for (const node of nodes) {
+    if (node.type === 'directory') {
+      out.push(`dir-${node.id}`)
+      out.push(...collectSubMenuOpenIndices(node.children ?? []))
+    } else if (isBranchMenu(node)) {
+      out.push(`menu-branch-${node.id}`)
+      out.push(...collectSubMenuOpenIndices(navigableChildren(node)))
+    }
+  }
+  return out
+}
+
+const defaultOpeneds = computed(() => {
+  if (uiMenuTree.value.length) {
+    return collectSubMenuOpenIndices(uiMenuTree.value)
+  }
+  return staticMenuGroups.value.map((g) => `static-${g.title}`)
+})
+
+/** UI 树异步加载后 remount menu，使 default-openeds 生效 */
+const menuRemountKey = computed(() => defaultOpeneds.value.join('|'))
+
 function routeIndex(r: RouteRecordNormalized) {
   return r.path === '' ? '/' : `/${r.path}`
 }
@@ -113,7 +149,9 @@ function routeIndex(r: RouteRecordNormalized) {
 <template>
   <el-scrollbar class="menu-scroll">
     <el-menu
+      :key="menuRemountKey"
       :default-active="activeMenu"
+      :default-openeds="defaultOpeneds"
       class="aside-menu"
       background-color="#1f2d3d"
       text-color="#cfd8dc"
