@@ -170,11 +170,25 @@ apply 阶段以 Superpowers 执行为主，OpenSpec 负责验证与归档：
 
 ---
 
+## 已归档 change（基线追溯）
+
+以下 change 已移入 `openspec/changes/archive/`，主规格已同步至 `openspec/specs/`：
+
+| 归档目录 | 类型 | Capability | 说明 |
+|----------|------|------------|------|
+| [`2026-06-11-cover-platform-baseline`](openspec/changes/archive/2026-06-11-cover-platform-baseline/) | 追溯性基线 | `monorepo-workspace`、`istanbul-live-sdk`、`coverage-demo-examples`、`cover-admin-auth`、`cover-admin-coverage`、`cover-admin-dashboard` | OpenSpec 引入前已实现的覆盖率平台全链路（SDK + 管理端 + 示例）；**未走 apply/TDD**，仅补规格与归档 |
+
+追溯性 change 在 proposal 中标注 retroactive，可跳过 `/opsx:apply`；**新功能** change 仍须走完整 apply 流程。
+
+---
+
 ## 相关文件
 
 | 文件 | 说明 |
 |------|------|
 | `openspec.md` | 命令速查 |
+| `openspec/specs/` | 当前生效的主规格（6 个 capability） |
+| `openspec/changes/archive/` | 已完成 change 归档 |
 | `.cursor/commands/clear-spec.md` | `/clear-spec` 清除未归档 change |
 | `openspec/config.yaml` | 默认 schema 与 AI 注入规则 |
 | `.cursor/rules/openspec-superpowers-workflow.mdc` | 路由与阶段分工 |

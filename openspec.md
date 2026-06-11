@@ -57,3 +57,10 @@
 ## Schema 位置
 
 `openspec/schemas/superpowers-bridge/`（社区 schema，来源 [JiangWay/openspec-schemas](https://github.com/JiangWay/openspec-schemas/tree/main/superpowers-bridge)）
+
+## 主规格与归档
+
+| 路径 | 说明 |
+|------|------|
+| `openspec/specs/` | 当前生效 capability 规格（6 项，见 [openSpec-superPower.md §已归档 change](./openSpec-superPower.md)） |
+| `openspec/changes/archive/2026-06-11-cover-platform-baseline/` | 覆盖率平台追溯性基线归档（SDK + 管理端 + 示例） |

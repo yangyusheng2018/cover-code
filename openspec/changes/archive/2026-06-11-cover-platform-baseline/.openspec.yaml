@@ -1,0 +1,5 @@
+schema: superpowers-bridge
+name: cover-platform-baseline
+status: archived
+archivedAt: "2026-06-11"
+note: 追溯性归档 — 记录 OpenSpec 引入前已实现的覆盖率平台基线能力
