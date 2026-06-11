@@ -1,0 +1,65 @@
+---
+description: OpenSpec 与 Superpowers 集成工作流路由与阶段分工
+alwaysApply: true
+---
+
+# OpenSpec × Superpowers 集成
+
+本仓库采用 **superpowers-bridge** schema：OpenSpec 负责规格治理（做什么），Superpowers 负责执行纪律（怎么做）。
+
+**前置条件**：在 Cursor Agent 中安装 Superpowers 插件（`/plugin-add superpowers`）。若缺少所需 skill，应停止并提示用户安装插件，或改用 `--schema spec-driven`。
+
+## 职责分工
+
+| 阶段 | 主导方 | 命令 / Skill |
+|------|--------|----------------|
+| 探索 / 脑暴 | OpenSpec + Superpowers | `/opsx:explore`，或口头脑暴 → 收敛后 `/opsx:propose` |
+| 规划产物 | OpenSpec | `/opsx:propose` / `/opsx:continue` → brainstorm → proposal → design → specs → tasks → plan |
+| 实现 | Superpowers | `/opsx:apply` → git worktree + subagent-driven-development + TDD |
+| 验证 / 归档 | OpenSpec | `/opsx:verify` → retrospective → `/opsx:archive` |
+
+## 入口分流
+
+| 触发场景 | 正确做法 |
+|----------|----------|
+| `/opsx:new` / `/opsx:ff` / `/opsx:propose` | 按 superpowers-bridge 既定流程执行 |
+| 口头「讨论设计 / 脑暴」 | 先口头脑暴，**不要**写入 `docs/superpowers/specs/`；五条判准全部满足后建议 `/opsx:propose`，需用户确认 |
+| Bug 修复 / 错别字 / 文档 / 配置微调 | **直接提 PR**，不创建 change |
+| 已在某个 change 中 | 使用 `/opsx:continue`、`/opsx:apply`、`/opsx:verify`、`/opsx:archive` |
+| 放弃未归档的需求 | `/clear-spec <名称>`（须用户确认，不可恢复） |
+
+## 快速流程
+
+```
+/opsx:ff <名称>      # 一次性生成全部规划产物
+/opsx:apply          # 工作树 + TDD 实现
+/opsx:verify         # 生成 verify.md
+/opsx:continue       # → retrospective（回顾）
+/opsx:archive        # 同步规格并归档
+```
+
+## 输出重定向（禁止泄漏）
+
+- 脑暴结果 → `openspec/changes/<名称>/brainstorm.md`（**禁止**写入 `docs/superpowers/specs/`）
+- 实现计划 → `openspec/changes/<名称>/plan.md`（**禁止**写入 `docs/superpowers/plans/`）
+
+## 切换 schema
+
+- 新建 change 默认：`superpowers-bridge`（见 `openspec/config.yaml`）
+- 简单修复：`/opsx:new <名称> --schema spec-driven`
+- 进行中的 change 保持创建时的 schema（例如 `admin-dashboard-frontend` 仍为 `spec-driven`）
+
+## 口头脑暴升级为 opsx 的五条判准
+
+五条**全部满足**才建议创建 change：
+
+1. **范围已锁定** — 用一句话说清包含什么、不包含什么
+2. **主要设计分歧已收敛** — 备选方案已选定，剩余仅为明确的待决事项（有负责人与影响面）
+3. **跨系统依赖已盘点** — 每项标注为：已就绪 / 可 mock / 确实未知
+4. **验收条件可陈述** — 有具体通过条件（例如：测试全绿 + N 项可交付成果）
+5. **对话进入确认阶段** — 最近几轮在确认细节，而非继续发散新方向
+
+## 参考
+
+- Schema 目录：`openspec/schemas/superpowers-bridge/`
+- 上游文档：https://github.com/JiangWay/openspec-schemas/tree/main/superpowers-bridge

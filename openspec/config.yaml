@@ -1,0 +1,29 @@
+schema: superpowers-bridge
+
+context: |
+  工作流：OpenSpec（superpowers-bridge）+ Cursor Agent 的 Superpowers 插件。
+  规划产物位于 openspec/changes/<名称>/。
+  禁止将设计/计划输出写入 docs/superpowers/specs/ 或 docs/superpowers/plans/。
+  安装 Superpowers：在 Cursor Agent 中执行 /plugin-add superpowers。
+  不涉及合约变更的简单修复：直接提 PR，或使用 --schema spec-driven。
+  文档与产物正文使用简体中文；命令名、路径、代码标识保持英文。
+
+rules:
+  brainstorm:
+    - 脑暴输出仅写入本 change 的 brainstorm.md
+    - 脑暴阶段不要预填 design.md
+  plan:
+    - 计划输出仅写入本 change 的 plan.md
+    - 将任务拆分为 2–5 分钟的 TDD 微步骤，并写明具体文件路径
+  tasks:
+    - 使用 `- [ ] X.Y 描述` 复选框格式，供 apply 阶段跟踪进度
+  verify:
+    - 标记通过前须执行 openspec validate --all
+  retrospective:
+    - 在开 PR 之前撰写；引用 commit 哈希与可量化证据
+  proposal:
+    - 正文使用简体中文
+  design:
+    - 正文使用简体中文
+  specs:
+    - Requirement 与 Scenario 描述使用简体中文；保留 SHALL/MUST 等规范用语

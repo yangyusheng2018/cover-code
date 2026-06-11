@@ -1,0 +1,27 @@
+---
+description: 项目文档与 OpenSpec 产物使用简体中文
+alwaysApply: true
+---
+
+# 中文文档规范
+
+本仓库的说明性文档、Cursor 规则、OpenSpec 规划产物默认使用**简体中文**。
+
+## 适用范围
+
+- `.cursor/rules/*.mdc`、项目根目录 `*.md`（如 `openspec.md`）
+- OpenSpec change 产物：`proposal.md`、`design.md`、`tasks.md`、`brainstorm.md`、`plan.md`、`verify.md`、`retrospective.md`
+- `openspec/specs/**/spec.md` 中的 Requirement 描述与 Scenario 正文
+- `openspec/config.yaml` 中的 `context` 与 `rules` 条目
+
+## 保持英文不变
+
+- 命令与插件名：`/opsx:apply`、`/plugin-add superpowers`
+- Schema / skill 标识：`superpowers-bridge`、`spec-driven`、`superpowers:brainstorming`
+- 文件路径、代码、配置键、Git 分支名、技术专有名词（TDD、PR、worktree 等可中英混用，首次出现可加简短中文注释）
+
+## 写作要求
+
+- 语句完整、可执行，避免中英夹杂的电报式短句
+- 表格、列表、标题用中文；示例命令与路径保持原样
+- 新建或更新上述文件时默认写中文；若用户明确要求英文再切换

@@ -1,0 +1,39 @@
+---
+description: OpenSpec 与 Superpowers 反模式与 apply 阶段约束
+alwaysApply: true
+---
+
+# OpenSpec × Superpowers 反模式与约束
+
+## 禁止事项
+
+- 安装 bridge 后仍让 brainstorming 写入 `docs/superpowers/specs/`
+- 让 writing-plans 写入 `docs/superpowers/plans/`
+- 待决事项未收敛就升级为 opsx change
+- 对 Bug 修复、错别字、Linter 规则调整也创建 change
+- 在 `/opsx:*` 流程中混用 Superpowers 默认输出路径
+
+## Apply 阶段顺序（不可打乱）
+
+```
+0. 技能预检（Pre-flight）
+→ 1. using-git-worktrees（创建隔离工作树）
+→ 2. subagent-driven-development（含 TDD 与代码审查）
+→ 3. 生成 verify.md
+→ 4. 生成 retrospective.md（须在开 PR 之前）
+→ 5. openspec archive（同步 delta 规格并归档）
+→ 6. finishing-a-development-branch（最后一步：开 PR / 合并）
+```
+
+若运行环境不支持 subagent：停止执行，提示安装 Superpowers 或改用 `spec-driven` schema。
+
+## 何时不走 opsx（直接 PR）
+
+| 场景 | 是否直接 PR |
+|------|-------------|
+| Bug 修复（不改变对外合约） | ✅ 是 |
+| 测试补写 / Linter / 非破坏性依赖升级 | ✅ 是 |
+| 错别字 / 文档 / 配置值微调 | ✅ 是 |
+| 新功能 / 破坏性变更 / 架构调整 | ❌ 否，走 opsx |
+
+原则：**流程仪式应与变更风险成正比**。
